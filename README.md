@@ -1,7 +1,9 @@
-# MINK
+# MINK_OS
 
 ## names:
-- todo (forgor)
+- Tomáš Čaplák
+- Jakub Ozsvald
+- Veronika Barchánková
 
 ## Intro
 
