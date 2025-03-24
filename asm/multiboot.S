@@ -1,4 +1,4 @@
-section .header
+section .multiboot_header
 _start_header:
   magic_number    dd 0xe85250d6
   architecture    dd 0x00000000
