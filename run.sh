@@ -23,12 +23,15 @@ cargo build --release --target x86_64-unknown-none
 
 # Build the assemblies
 echo "BUILDING ASSEMBLIES"
-nasm -f elf64 -o build/boot.o asm/boot.S
-nasm -f elf64 -o build/multiboot.o asm/multiboot.S
+for x in $(ls asm/*.S); do
+  outname=$(basename ${x})
+  nasm -f elf64 -o build/${outname%%S}o ${x} 
+done
 
 # Link it together
 echo "LINKING"
-ld -n -o build/image.bin -T linker/linker.ld build/*.o target/x86_64-unknown-none/release/libmink.a
+#ld -n -o build/image.bin -T linker/linker.ld build/*.o target/x86_64-unknown-none/release/libmink.a
+ld -n -o build/image.bin -T linker/link.ld build/*.o target/x86_64-unknown-none/release/libmink.a
 
 # Move the linked binary into ISO structure
 echo "BUILDING ISO"

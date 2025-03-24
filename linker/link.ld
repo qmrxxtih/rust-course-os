@@ -1,23 +1,27 @@
-ENTRY(mink_enter)
+ENTRY(_start)
 SECTIONS {
-  . = 1M;
-  .text :
-  {
-    *(.header)
+  . = 0x100000;
+  .mb_header : {
+    *(.multiboot_header)
+  }
+  .text : {
     *(.text)
   }
-  .rodata :
-  {
-    *(.rodata)
-  }
-  .data :
-  {
+  .data : {
     *(.data)
   }
-  .bss : 
-  {
+  .bss : {
     *(.bss)
     *(COMMON)
     _bss_end = .;
+  }
+  .stack (NOLOAD) : {
+    . = ALIGN(8);
+    stack_start = .;
+    . += 0x10000;
+    stack_end = .;
+  }
+  .rodata : {
+    *(.rodata)
   }
 }
