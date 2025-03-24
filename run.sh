@@ -3,15 +3,13 @@
 # Small build script to build it all.
 
 # Check for requirements
-requirements=("qemu-system-x86_64" "grub-mkrescue" "cargo" "nasm")
+requirements=("qemu-system-x86_64" "grub-mkrescue" "cargo" "nasm" "xorriso")
 
-# TODO do that later lmao
-for req in ${requirements}; do
-  which ${req}
-  if [ $? -ne 0 ]; then
-    echo "missing dependency, please check you have all of following commands available : ${requirements[@]}"
-    exit 1
-  fi
+for req in "${requirements[@]}"; do
+    if ! command -v "${req}" > /dev/null; then
+        echo "missing dependency, please check you have all of following commands available : ${requirements[*]}"
+        exit 1
+    fi
 done
 
 # BUILD IT ALL
