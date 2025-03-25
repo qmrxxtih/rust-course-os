@@ -1,1 +1,5 @@
+/build
 /out
+/target
+*.iso
+/iso

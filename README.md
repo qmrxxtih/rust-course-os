@@ -34,19 +34,19 @@ By working on this project we want to learn low-level programming, nostd rust (w
 
 - `NASM` for compiling the bootstrap code
 
-- `QEMU` for system emulation (requires x86-64 emulation to be possible)
+- `QEMU` (mainly `qemu-system-x86_64`) for system emulation (requires x86-64 emulation to be possible)
 
-- `GRUB` development files
+- `GRUB` development package (`grub-mkrescue` has to be available)
 
 - `xorriso` for creation of Multiboot image
 
-- In case they are not packed by default with GRUB, you also need GRUB BIOS files
+- `make` for automated building and running
 
-The `run.sh` script checks if all required programs are available.
+- In case they are not packed by default with GRUB, you also need GRUB BIOS files (folder `/usr/lib/grub/i386-pc/` must exist and not be empty)
 
 ## Running the code
 
-To compile and run the code, simply run `run.sh` file from the project root. This will automatically compile the Rust and Assembly code, link the binaries, build the GRUB image and boot the OS.
+To compile the code, run `make TARGET=release` to build in release mode. After that you can run the resulting image using `make run` command.
 
 ## Technical description
 
