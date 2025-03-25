@@ -30,7 +30,36 @@ By working on this project we want to learn low-level programming, nostd rust (w
 
 ## Dependencies
 
-qemu for running it, otherwise none (probably)
+- Functional Rust environment (obviously)
+
+- `NASM` for compiling the bootstrap code
+
+- `QEMU` for system emulation (requires x86-64 emulation to be possible)
+
+- `GRUB` development files
+
+- `xorriso` for creation of Multiboot image
+
+- In case they are not packed by default with GRUB, you also need GRUB BIOS files
+
+The `run.sh` script checks if all required programs are available.
+
+## Running the code
+
+To compile and run the code, simply run `run.sh` file from the project root. This will automatically compile the Rust and Assembly code, link the binaries, build the GRUB image and boot the OS.
+
+## Technical description
+
+Our operating system uses [multiboot2](https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html) specification as its base. Multiboot allows booting of multiple operating systems using one unified standard specification. Most important part is the Multiboot header, which has fixed format and in our case is defined in `asm/multiboot.S` file. Multiboot launches selected OS image, sets up the CPU into valid protected mode, and handles control to our startup procedure (defined in `asm/boot.S` as `_start`), from which, theoretically, one could jump into Rust code and call it a day. However, modern Rust is built on x86_**64**, that is, 64-bit architecture, and protected mode only supports 32-bit instructions and constructs. So we need to set the CPU into so called "long mode". The setup is done using freely available code from [OSdev wiki](https://wiki.osdev.org/Setting_Up_Long_Mode). General order of swithing into long mode is:
+
+- Check if CPU supports `CPUID` instruction for retrieval of CPU related information,
+
+- Check if CPU supports long mode using the `CPUID` instruction
+
+- Set up initial paging, since protected mode uses segmentation
+
+- Jump to 64-bit bootstrap code (defined in `boot64.S`)
+
 
 ## Diagram
 
