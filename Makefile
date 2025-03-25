@@ -21,6 +21,7 @@ else
 	ERR = $(error invalid TARGET '${TARGET}')
 endif
 
+SOURCES = $(wildcard src/*.rs)
 ASM = $(wildcard boot/*.S)
 OBJECTS = $(patsubst boot/%.S,${OUTDIR}/${TARGET}/obj/%.o,${ASM})
 
@@ -47,7 +48,7 @@ ${IMAGE}: linker/link.ld ${OBJECTS} ${LIB}
 	@mkdir -p $(dir $@)
 	${LD} ${LD_FLAGS} ${OBJECTS} ${LIB} -o $@
 
-${LIB}: src/lib.rs
+${LIB}: ${SOURCES}
 	${CARGO} build ${CARGO_FLAGS} ${EXTRA_CARGO_FLAGS} --target-dir ${OUTDIR}
 
 ${OUTDIR}/${TARGET}/obj/%.o: boot/%.S
