@@ -1,5 +1,6 @@
 const VGA_TEXT_MODE_WIDTH: usize = 80;
 const VGA_TEXT_MODE_HEIGHT: usize = 25;
+const VGA_TEXT_ADDR: usize = 0xb8000;
 
 #[allow(unused)]
 pub struct VgaTextModeWriter {
@@ -71,7 +72,7 @@ impl VgaTextModeWriter {
         for y in 0..VGA_TEXT_MODE_HEIGHT {
             for x in 0..VGA_TEXT_MODE_WIDTH {
                 unsafe {
-                    *((0xb8000 + 2 * x + y * VGA_TEXT_MODE_WIDTH * 2)
+                    *((VGA_TEXT_ADDR + 2 * x + y * VGA_TEXT_MODE_WIDTH * 2)
                         as *mut u16) = 0x0000;
                 }
             }
@@ -86,7 +87,7 @@ impl VgaTextModeWriter {
         }
         for x in 0..VGA_TEXT_MODE_WIDTH {
             unsafe {
-                *((0xb8000 + 2 * x + row * VGA_TEXT_MODE_WIDTH * 2)
+                *((VGA_TEXT_ADDR + 2 * x + row * VGA_TEXT_MODE_WIDTH * 2)
                     as *mut u16) = 0x0000;
             }
         }
@@ -128,11 +129,11 @@ impl VgaTextModeWriter {
                 for x in 0..VGA_TEXT_MODE_WIDTH {
                     // Copy character from following line into current line.
                     unsafe {
-                        let c = *((0xb8000
+                        let c = *((VGA_TEXT_ADDR
                             + (y + count) * VGA_TEXT_MODE_WIDTH * 2
                             + x * 2)
                             as *const u16);
-                        *((0xb8000 + y * VGA_TEXT_MODE_WIDTH * 2 + x * 2)
+                        *((VGA_TEXT_ADDR + y * VGA_TEXT_MODE_WIDTH * 2 + x * 2)
                             as *mut u16) = c;
                     }
                 }
@@ -162,8 +163,8 @@ impl VgaTextModeWriter {
             self.pos_y -= scroll;
         }
         let offset = 2 * self.pos_y * VGA_TEXT_MODE_WIDTH + 2 * self.pos_x;
-        let attr_ptr: *mut u8 = (0xb8001 + offset) as *mut u8;
-        let char_ptr: *mut u8 = (0xb8000 + offset) as *mut u8;
+        let attr_ptr: *mut u8 = (VGA_TEXT_ADDR + 1 + offset) as *mut u8;
+        let char_ptr: *mut u8 = (VGA_TEXT_ADDR + offset) as *mut u8;
 
         if c == b'\n' {
             self.pos_y += 1;
