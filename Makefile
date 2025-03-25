@@ -29,7 +29,7 @@ IMAGE = ${OUTDIR}/${TARGET}/iso/boot/image.bin
 LIB = ${OUTDIR}/x86_64-unknown-none/${TARGET}/libmink.a
 
 .SUFFIXES:
-.PHONY: all clean err run image
+.PHONY: all clean run
 
 .DEFAULT_GOAL = all
 
