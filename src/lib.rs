@@ -1,10 +1,12 @@
 #![no_std]
 #![no_main]
 
+mod port;
 mod vga;
 
-use core::arch::asm;
+
 use core::panic::PanicInfo;
+use port::output_byte;
 use vga::{VgaTextModeColor, VgaTextModeWriter};
 
 const BIG_MINK: &str = "                   88             88         
@@ -17,16 +19,6 @@ const BIG_MINK: &str = "                   88             88
 88      88      88 88 88       88 88   `Y8a
 ";
 
-// Simple function to output value to given output port
-fn output_byte(addr: u16, val: u8) {
-    unsafe {
-        asm!(
-            "out dx,al",
-            in("dx") addr,
-            in("al") val
-        )
-    }
-}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mink_entry() -> ! {
