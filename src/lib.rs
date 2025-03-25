@@ -3,12 +3,11 @@
 
 mod vga;
 
-use core::panic::PanicInfo;
 use core::arch::asm;
-use vga::{VgaTextModeColor,VgaTextModeWriter};
+use core::panic::PanicInfo;
+use vga::{VgaTextModeColor, VgaTextModeWriter};
 
-const BIG_MINK:&str = 
-"                   88             88         
+const BIG_MINK: &str = "                   88             88         
                    \"\"             88         
                                   88         
 88,dPYba,,adPYba,  88 8b,dPPYba,  88   ,d8   
@@ -16,9 +15,7 @@ const BIG_MINK:&str =
 88      88      88 88 88       88 8888[      
 88      88      88 88 88       88 88`\"Yba,   
 88      88      88 88 88       88 88   `Y8a
-"
-;
-
+";
 
 // Simple function to output value to given output port
 fn output_byte(addr: u16, val: u8) {
@@ -46,10 +43,7 @@ pub extern "C" fn mink_entry() -> ! {
     loop {}
 }
 
-
-
 #[panic_handler]
 fn panic_handler(_info: &PanicInfo) -> ! {
     loop {}
 }
-
