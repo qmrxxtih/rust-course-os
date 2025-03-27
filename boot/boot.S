@@ -26,7 +26,8 @@ section .text
   bits 32
   extern mink_enter
 _start:
-  mov esp,stack_start
+  mov esp,stack_start   ; INITIALISE STACK
+  mov edi, ebx          ; 1st argument for Rust program = Multiboot Boot Information
 
   cmp eax,0x36d76289    ; check if we really are booted in multiboot
   jnz invalid_boot      ; if not, report error

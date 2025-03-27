@@ -2,11 +2,19 @@ const VGA_TEXT_MODE_WIDTH: usize = 80;
 const VGA_TEXT_MODE_HEIGHT: usize = 25;
 const VGA_TEXT_ADDR: usize = 0xb8000;
 
+
 #[allow(unused)]
 pub struct VgaTextModeWriter {
     pos_x: usize,
     pos_y: usize,
     current_attrib: u8,
+}
+
+impl core::fmt::Write for VgaTextModeWriter {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.write_text(s.as_bytes());
+        Ok(())
+    }
 }
 
 #[allow(unused)]
