@@ -8,7 +8,7 @@ mod vga;
 use core::fmt::Write;
 use core::panic::PanicInfo;
 
-use multiboot::Multiboot2;
+use multiboot::{Multiboot2, Tag};
 use port::output_byte;
 use vga::{VgaTextModeColor, VgaTextModeWriter};
 
@@ -44,6 +44,13 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
 
     for tag in mbi {
         writeln!(writer, "{:?}", tag).unwrap();
+        if let Tag::ElfSymbols(mut es) = tag {
+            for section in es {
+                if (section.size != 0) {
+                    writeln!(writer, "{:?}", section);
+                }
+            }
+        }
     }
 
     loop {}

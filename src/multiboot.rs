@@ -99,6 +99,99 @@ pub struct FramebufferInfoBase {
     reserved: u8,
 }
 
+#[repr(u32)]
+#[derive(Debug, Clone, Copy)]
+pub enum ElfSectionType {
+    Pad,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+/// defined according to Portable Formats Specification, Version 1.1 (1-9)
+pub struct ElfSection {
+    /// This member specifies the name of the section. Its value is an index
+    /// into the section header string table section [see ‘‘String Table’’
+    /// below], giving the location of a null- terminated string.
+    pub name_idx: u32,
+
+    /// This member categorizes the section’s contents and semantics.
+    pub typ: u32,
+
+    /// Sections support 1-bit flags that describe miscellaneous attributes.
+    /// Flag definitions appear below.
+    /// TODO safe interface for this
+    pub flags: u32,
+
+    /// If the section will appear in the memory image of a process, this
+    /// member gives the address at which the section’s first byte should
+    /// reside. Otherwise, the member con- tains 0.
+    pub addr: u32,
+
+    /// This member’s value gives the byte offset from the beginning of the
+    /// file to the first byte in the section. One section type, SHT_NOBITS
+    /// described below, occupies no space in the file, and its sh_offset
+    /// member locates the conceptual placement in the file.
+    pub offset: u32,
+
+    /// This member gives the section’s size in bytes. Unless the section type
+    /// is SHT_NOBITS, the section occupies sh_size bytes in the file.
+    /// A section of type SHT_NOBITS may have a non-zero size, but it occupies
+    /// no space in the file.
+    pub size: u32,
+
+    /// This member holds a section header table index link, whose
+    /// interpretation depends on the section type. A table below describes the
+    /// values.
+    pub link: u32,
+
+    /// This member holds extra information, whose interpretation depends on
+    /// the section type. A table below describes the values.
+    pub info: u32,
+
+    /// Some sections have address alignment constraints. For example, if
+    /// a section holds a doubleword, the system must ensure doubleword
+    /// alignment for the entire section. That is, the value of sh_addr must be
+    /// congruent to 0, modulo the value of sh_addralign. Currently, only 0 and
+    /// positive integral powers of two are allowed. Values 0 and 1 mean the
+    /// section has no alignment constraints.
+    pub addr_align: u32,
+
+    /// Some sections hold a table of fixed-size entries, such as a symbol table.
+    /// For such a sec- tion, this member gives the size in bytes of each entry.
+    /// The member contains 0 if the section does not hold a table of fixed-size
+    /// entries.
+    pub entry_size: u32,
+}
+
+#[derive(Debug)]
+pub struct ElfSymbols {
+    len: u32,
+    entry_size: u32,
+    str_table_idx: u32,
+    ptr: *const u8,
+    idx: u32,
+}
+
+impl Iterator for ElfSymbols {
+    type Item = &'static ElfSection;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if (self.idx >= self.entry_size) {
+            None
+        } else {
+            let res = unsafe {
+                &*self
+                    .ptr
+                    .add((self.idx * self.entry_size) as usize)
+                    .cast::<ElfSection>()
+            };
+            self.idx += 1;
+
+            Some(res)
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ApmTable {
@@ -222,6 +315,21 @@ pub enum Tag {
         base: &'static FramebufferInfoBase,
     },
 
+    /// https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html#ELF_002dSymbols
+    ///
+    /// This tag contains section header table from an ELF kernel, the size of
+    /// each entry, number of entries, and the string table used as the index
+    /// of names. They correspond to the ‘shdr_*’ entries (‘shdr_num’, etc.) in
+    /// the Executable and Linkable Format (ELF) specification in the program
+    /// header. All sections are loaded, and the physical address fields of the
+    /// ELF section header then refer to where the sections are in memory
+    /// (refer to the i386 ELF documentation for details as to how to read the
+    /// section header(s)).
+    ///
+    /// The spec says the fields in elf symbols are u16, but the example C code
+    /// uses u32 and it works (unlike u16)
+    ElfSymbols(ElfSymbols),
+
     /// The fields ‘version’, ‘cseg’, ‘offset’, ‘cseg_16’, ‘dseg’, ‘flags’,
     /// ‘cseg_len’, ‘cseg_16_len’, ‘dseg_len’ indicate the version number, the
     /// protected mode 32-bit code segment, the offset of the entry point, the
@@ -290,11 +398,11 @@ impl Tag {
                     let string = slice::from_raw_parts(
                         ptr.add(2).cast(),
                         // tag_info (8) + 2 * u32 (8) = 16
-                        tag_info.size as usize - 16 ,
+                        tag_info.size as usize - 16,
                     );
                     Self::Modules {
                         mod_start: *ptr,
-                        mod_end: *ptr.add(1),
+                        mod_end: *(ptr.add(1)),
                         string,
                     }
                 }
@@ -305,7 +413,7 @@ impl Tag {
                     Self::BootDevice(&*(ptr as *const BootDevice))
                 }
                 TagType::MemoryMap => {
-                    if (*ptr.add(1) != 0) {
+                    if (*(ptr.add(1)) != 0) {
                         unimplemented!("unsupported memory map entry_version");
                     }
 
@@ -321,7 +429,13 @@ impl Tag {
                 TagType::FramebufferInfo => Self::FramebufferInfo {
                     base: &*(ptr as *const FramebufferInfoBase),
                 },
-                // TODO: TagType::ElfSymbols
+                TagType::ElfSymbols => Self::ElfSymbols(ElfSymbols {
+                    len: *ptr,
+                    entry_size: *(ptr.add(1)),
+                    str_table_idx: *(ptr.add(2)),
+                    ptr: ptr.add(4).cast(),
+                    idx: 0,
+                }),
                 TagType::ApmTable => {
                     Self::ApmTable(&*(ptr as *const ApmTable))
                 }
@@ -359,7 +473,7 @@ impl Multiboot2 {
         unsafe {
             Self {
                 total_size: *ptr,
-                reserved: *ptr.add(1),
+                reserved: *(ptr.add(1)),
                 ptr: ptr.add(2) as *const TagInfo,
             }
         }
