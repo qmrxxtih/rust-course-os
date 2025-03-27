@@ -5,10 +5,10 @@ mod multiboot;
 mod port;
 mod vga;
 
-use core::fmt::{self, Write};
+use core::fmt::Write;
 use core::panic::PanicInfo;
 
-use multiboot::MultibootMBI;
+use multiboot::Multiboot2;
 use port::output_byte;
 use vga::{VgaTextModeColor, VgaTextModeWriter};
 
@@ -22,41 +22,39 @@ const BIG_MINK: &str = "                   88             88
 88      88      88 88 88       88 88   `Y8a
 ";
 
-
-
 #[unsafe(no_mangle)]
-pub extern "C" fn mink_entry(multiboot_info: usize) -> ! {
+pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     let mut writer = VgaTextModeWriter::new();
-    let mis = MultibootMBI::load_from_addr(multiboot_info as *const u32);
+    let mbi = Multiboot2::from_ptr(multiboot_addr as *const u32);
 
     // Disable blinking cursor
     output_byte(0x3D4, 0x0A);
     output_byte(0x3D5, 0x20);
-    // Create new VGA writer
-    // Set output text color attributes
+
     writer.set_fg_color(VgaTextModeColor::LightMagenta);
-    // Write to VGA buffer
     writer.write_text(BIG_MINK.as_bytes());
-
     writer.set_fg_color(VgaTextModeColor::White);
-    writeln!(writer, "\nMBI LOADED WITH : SIZE {}, RESERVED {} ::", mis.total_size(), mis.reserved()).unwrap();
 
-    let mut tags = mis.iter();
+    writeln!(
+        writer,
+        "\nMBI LOADED WITH : SIZE {}, RESERVED {} ::",
+        mbi.total_size, mbi.reserved
+    )
+    .unwrap();
 
-    while let Some(tag) = tags.next() {
-        let tag = unsafe {*tag.clone()};
-        writeln!(writer, "TYPE : {}, SIZE : {}", tag.typ, tag.size).unwrap();
+    for tag in mbi {
+        writeln!(writer, "{:?}", tag).unwrap();
     }
 
     loop {}
 }
 
-
 #[panic_handler]
 fn panic_handler(_info: &PanicInfo) -> ! {
     let mut panic_writer = VgaTextModeWriter::new();
-    panic_writer.clear_screen();
+    // panic_writer.clear_screen();
     panic_writer.set_fg_color(VgaTextModeColor::Red);
     panic_writer.write_text(b"[ERROR] PANIC ENCOUNTERED");
+
     loop {}
 }
