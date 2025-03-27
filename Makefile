@@ -9,7 +9,7 @@ CARGO ?= cargo
 
 CARGO_FLAGS_RELEASE = --release
 CARGO_FLAGS_DEBUG =
-CARGO_FLAGS = --target x86_64-unknown-none
+CARGO_FLAGS =
 EXTRA_CARGO_FLAGS =
 LD_FLAGS = -n -T linker/link.ld
 
