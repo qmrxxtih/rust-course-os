@@ -84,7 +84,7 @@ pub struct VbeInfo {
     interface_off: u16,
     interface_len: u16,
     control_info: [u8; 512],
-    mode_inf: [u8; 256],
+    mode_info: [u8; 256],
 }
 
 #[repr(C)]
