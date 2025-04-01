@@ -176,7 +176,8 @@ impl Iterator for ElfSymbols {
     type Item = &'static ElfSection;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if (self.idx >= self.entry_size) {
+        // if (self.idx >= self.entry_size) {
+        if (self.idx >= self.len) {
             None
         } else {
             let res = unsafe {
@@ -433,7 +434,7 @@ impl Tag {
                     len: *ptr,
                     entry_size: *(ptr.add(1)),
                     str_table_idx: *(ptr.add(2)),
-                    ptr: ptr.add(4).cast(),
+                    ptr: ptr.add(3).cast(), // NOTE : Maybe? Not sure
                     idx: 0,
                 }),
                 TagType::ApmTable => {

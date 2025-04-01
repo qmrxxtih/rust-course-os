@@ -46,9 +46,10 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
         writeln!(writer, "{:?}", tag).unwrap();
         if let Tag::ElfSymbols(mut es) = tag {
             for section in es {
-                if (section.size != 0) {
-                    writeln!(writer, "{:?}", section);
-                }
+                // For some reason this if statement is useless now lmao
+                //if (section.size != 0) {
+                writeln!(writer, "{:?}", section);
+                //}
             }
         }
     }
