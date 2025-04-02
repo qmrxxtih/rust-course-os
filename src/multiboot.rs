@@ -2,6 +2,10 @@
 
 use core::slice;
 
+const fn addr_align(addr: usize, alignment: usize) -> usize {
+    ((addr + alignment - 1) & !(alignment - 1))
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
 pub enum TagType {
@@ -161,6 +165,13 @@ pub struct ElfSection {
     /// The member contains 0 if the section does not hold a table of fixed-size
     /// entries.
     pub entry_size: u32,
+
+    pub test1: u32,
+    pub test2: u32,
+    pub test3: u32,
+    pub test4: u32,
+    pub test5: u32,
+    pub test6: u32,
 }
 
 #[derive(Debug)]
@@ -176,7 +187,6 @@ impl Iterator for ElfSymbols {
     type Item = &'static ElfSection;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // if (self.idx >= self.entry_size) {
         if (self.idx >= self.len) {
             None
         } else {
@@ -434,7 +444,7 @@ impl Tag {
                     len: *ptr,
                     entry_size: *(ptr.add(1)),
                     str_table_idx: *(ptr.add(2)),
-                    ptr: ptr.add(3).cast(), // NOTE : Maybe? Not sure
+                    ptr: ptr.add(3).cast(),
                     idx: 0,
                 }),
                 TagType::ApmTable => {
@@ -493,8 +503,8 @@ impl Iterator for Multiboot2 {
         let result = Tag::from_ptr(self.ptr);
 
         // aligning to 8
-        let addr = (self.ptr as usize) + (tag_info.size as usize) + 7;
-        self.ptr = (addr & !7) as *const TagInfo;
+        self.ptr = addr_align(self.ptr as usize + tag_info.size as usize, 8)
+            as *const TagInfo;
 
         Some(result)
     }
