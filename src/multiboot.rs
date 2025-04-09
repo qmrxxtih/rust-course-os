@@ -124,24 +124,24 @@ pub struct ElfSection {
     /// Sections support 1-bit flags that describe miscellaneous attributes.
     /// Flag definitions appear below.
     /// TODO safe interface for this
-    pub flags: u32,
+    pub flags: u64,
 
     /// If the section will appear in the memory image of a process, this
     /// member gives the address at which the section’s first byte should
     /// reside. Otherwise, the member con- tains 0.
-    pub addr: u32,
+    pub addr: u64,
 
     /// This member’s value gives the byte offset from the beginning of the
     /// file to the first byte in the section. One section type, SHT_NOBITS
     /// described below, occupies no space in the file, and its sh_offset
     /// member locates the conceptual placement in the file.
-    pub offset: u32,
+    pub offset: u64,
 
     /// This member gives the section’s size in bytes. Unless the section type
     /// is SHT_NOBITS, the section occupies sh_size bytes in the file.
     /// A section of type SHT_NOBITS may have a non-zero size, but it occupies
     /// no space in the file.
-    pub size: u32,
+    pub size: u64,
 
     /// This member holds a section header table index link, whose
     /// interpretation depends on the section type. A table below describes the
@@ -158,20 +158,13 @@ pub struct ElfSection {
     /// congruent to 0, modulo the value of sh_addralign. Currently, only 0 and
     /// positive integral powers of two are allowed. Values 0 and 1 mean the
     /// section has no alignment constraints.
-    pub addr_align: u32,
+    pub addr_align: u64,
 
     /// Some sections hold a table of fixed-size entries, such as a symbol table.
     /// For such a sec- tion, this member gives the size in bytes of each entry.
     /// The member contains 0 if the section does not hold a table of fixed-size
     /// entries.
-    pub entry_size: u32,
-
-    pub test1: u32,
-    pub test2: u32,
-    pub test3: u32,
-    pub test4: u32,
-    pub test5: u32,
-    pub test6: u32,
+    pub entry_size: u64,
 }
 
 #[derive(Debug)]
