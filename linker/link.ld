@@ -5,13 +5,13 @@ SECTIONS {
     *(.multiboot_header)
   }
   .text : {
-    *(.text)
+    *(.text .text.*)
   }
   .data : {
-    *(.data)
+    *(.data .data.*)
   }
   .bss : {
-    *(.bss)
+    *(.bss .bss.*)
     *(COMMON)
     _bss_end = .;
   }
@@ -22,6 +22,6 @@ SECTIONS {
     stack_end = .;
   }
   .rodata : {
-    *(.rodata)
+    *(.rodata .rodata.*)
   }
 }
