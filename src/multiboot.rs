@@ -106,7 +106,22 @@ pub struct FramebufferInfoBase {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
 pub enum ElfSectionType {
-    Pad,
+    Null = 0,
+    Progbits,
+    SymTab,
+    StrTab,
+    Rela,
+    Hash,
+    Dynamic,
+    Note,
+    NoBits,
+    Rel,
+    Shlib,
+    Dynsym,
+    LoProc = 0x70000000,
+    HiProc = 0x7fffffff,
+    LoUser = 0x80000000,
+    HiUser = 0xffffffff,
 }
 
 #[repr(C)]
@@ -119,7 +134,7 @@ pub struct ElfSection {
     pub name_idx: u32,
 
     /// This member categorizes the section’s contents and semantics.
-    pub typ: u32,
+    pub typ: ElfSectionType,
 
     /// Sections support 1-bit flags that describe miscellaneous attributes.
     /// Flag definitions appear below.
