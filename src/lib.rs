@@ -1,16 +1,21 @@
 #![no_std]
 #![no_main]
+#![feature(abi_x86_interrupt)]
 
+mod guru;
+mod interrupts;
 mod multiboot;
+mod pic;
 mod port;
 mod vga;
 
-use core::fmt::Write;
 use core::panic::PanicInfo;
 
-use multiboot::{Multiboot2, Tag};
+use interrupts::init_idt;
+
+use multiboot::Multiboot2;
 use port::output_byte;
-use vga::{VgaTextModeColor, VgaTextModeWriter};
+use vga::{vga_set_foreground, VgaTextModeColor};
 
 const BIG_MINK: &str = "                   88             88         
                    \"\"             88         
@@ -22,51 +27,41 @@ const BIG_MINK: &str = "                   88             88
 88      88      88 88 88       88 88   `Y8a
 ";
 
+
 #[unsafe(no_mangle)]
 pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
-    let mut writer = VgaTextModeWriter::new();
     let mbi = Multiboot2::from_ptr(multiboot_addr as *const u32);
 
-    // Disable blinking cursor
+    // Initialising interrupt vector by loading IDT (Interrupt Descriptor Table)
+    init_idt();
+    // Initialising PIC8259 interrupt chain
+    pic::init();
+    // Enabling external interrupts by calling STI (set interrupt) instruction
+    x86_64::instructions::interrupts::enable();
+
+    // Disable blinking cursor by writing VGA control registers
     output_byte(0x3D4, 0x0A);
     output_byte(0x3D5, 0x20);
 
-    writer.set_fg_color(VgaTextModeColor::LightMagenta);
-    writer.write_text(BIG_MINK.as_bytes());
-    writer.set_fg_color(VgaTextModeColor::White);
+    vga_set_foreground(VgaTextModeColor::LightMagenta);
+    vga_printf!("{}", BIG_MINK);
+    vga_set_foreground(VgaTextModeColor::White);
+    vga_printf!("\nMBI LOADED WITH : SIZE {}, RESERVED {} ::", mbi.total_size, mbi.reserved);
 
-    writeln!(
-        writer,
-        "\nMBI LOADED WITH : SIZE {}, RESERVED {} ::",
-        mbi.total_size, mbi.reserved
-    )
-    .unwrap();
+    vga_printf!("LOADED {} TAGS", mbi.into_iter().count());
 
-    for tag in mbi {
-        writeln!(writer, "{:?}", tag).unwrap();
-        if let Tag::ElfSymbols(mut es) = tag {
-            // writeln!(writer, "{:?}", es.next().unwrap());
-            // writeln!(writer, "{:?}", es.next().unwrap());
-            // writeln!(writer, "{:?}", es.next().unwrap());
-            // writeln!(writer, "{:?}", es.next().unwrap());
-            for section in es {
-               // For some reason this if statement is useless now lmao
-               //if (section.size != 0) {
-               writeln!(writer, "{:?}", section);
-               //}
-            }
-        }
-    }
+    // test of interrupts :3
+    // x86_64::instructions::interrupts::int3();
+    
+    // triggering very bad stuff
+    // unsafe {
+    //     *(0xdeadbeef as *mut u8) = 42;
+    // }
 
     loop {}
 }
 
 #[panic_handler]
-fn panic_handler(_info: &PanicInfo) -> ! {
-    let mut panic_writer = VgaTextModeWriter::new();
-    // panic_writer.clear_screen();
-    panic_writer.set_fg_color(VgaTextModeColor::Red);
-    panic_writer.write_text(b"[ERROR] PANIC ENCOUNTERED");
-
-    loop {}
+fn panic_handler(info: &PanicInfo) -> ! {
+    guru::guru_panic(&info)
 }

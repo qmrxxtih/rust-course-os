@@ -27,7 +27,7 @@ OBJECTS = $(patsubst boot/%.S,${OUTDIR}/${TARGET}/obj/%.o,${ASM})
 
 ISO = ${OUTDIR}/${TARGET}/mink.iso
 IMAGE = ${OUTDIR}/${TARGET}/iso/boot/image.bin
-LIB = ${OUTDIR}/x86_64-unknown-none/${TARGET}/libmink.a
+LIB = ${OUTDIR}/custom_target/${TARGET}/libmink.a
 
 .SUFFIXES:
 .PHONY: all clean run
@@ -49,7 +49,8 @@ ${IMAGE}: linker/link.ld ${OBJECTS} ${LIB}
 	${LD} ${LD_FLAGS} ${OBJECTS} ${LIB} -o $@
 
 ${LIB}: ${SOURCES}
-	${CARGO} build ${CARGO_FLAGS} ${EXTRA_CARGO_FLAGS} --target-dir ${OUTDIR}
+	@mkdir -p $(dir $@)
+	${CARGO} +nightly build ${CARGO_FLAGS} ${EXTRA_CARGO_FLAGS} --target-dir ${OUTDIR}
 
 ${OUTDIR}/${TARGET}/obj/%.o: boot/%.S
 	@mkdir -p $(dir $@)
