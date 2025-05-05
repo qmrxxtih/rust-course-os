@@ -8,10 +8,12 @@ pdp_table:
 pd_table:
   resb 4096
 stack_end:
-  resb 1024
+  resb 0x10000
 stack_start:
 
+
 section .rodata
+; GDT table entries
 longmode_gdt:
   dq 0 ; zero entry
 gdt_code: equ $ - longmode_gdt

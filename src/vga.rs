@@ -1,3 +1,5 @@
+use lazy_static::lazy_static;
+
 const VGA_TEXT_MODE_WIDTH: usize = 80;
 const VGA_TEXT_MODE_HEIGHT: usize = 25;
 const VGA_TEXT_ADDR: usize = 0xb8000;
@@ -15,6 +17,67 @@ impl core::fmt::Write for VgaTextModeWriter {
         self.write_text(s.as_bytes());
         Ok(())
     }
+}
+
+lazy_static! {
+    static ref VGA:spin::Mutex<VgaTextModeWriter> = spin::Mutex::new(VgaTextModeWriter::new());
+}
+
+/// Prints text to VGA buffer using global VGA writer instance.
+pub fn vga_print(text: &[u8]) {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        VGA.lock().write_text(text);
+    })
+}
+
+/// Prints single character to VGA buffer using global VGA writer instance.
+pub fn vga_print_char(c: u8) {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        VGA.lock().write_char(c);
+    })
+}
+
+/// DO NOT USE: Private print function for the macro
+pub fn ghost_print(args: core::fmt::Arguments) {
+    use core::fmt::Write;
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        VGA.lock().write_fmt(args).unwrap();
+    });
+}
+
+/// Sets global VGA writer's foreground text color.
+pub fn vga_set_foreground(color: VgaTextModeColor) {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        VGA.lock().set_fg_color(color);
+    });
+}
+
+/// Sets global VGA writer's background text color.
+pub fn vga_set_background(color: VgaTextModeColor) {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        VGA.lock().set_bg_color(color);
+    });
+}
+
+/// Clears screen using global VGA writer.
+pub fn vga_clear_screen() {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        VGA.lock().clear_screen();
+    });
+}
+
+/// Sets global VGA writer's cursor position.
+pub fn vga_set_cursor_pos(x: Option<usize>, y: Option<usize>) {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        VGA.lock().set_cursor(x, y);
+    });
+}
+
+#[macro_export]
+macro_rules! vga_printf {
+    ($($arg:tt)*) => {
+        (crate::vga::ghost_print(format_args!($($arg)*)))
+    };
 }
 
 #[allow(unused)]
@@ -66,7 +129,7 @@ impl VgaTextModeWriter {
     /// Create new VGA text mode writer for writing information onto screen.
     /// New writer's position is set to 0:0 (upper left corner).
     /// Default text attribute is white foreground with black background and no blinking cursor.
-    pub const fn new() -> Self {
+    fn new() -> Self {
         Self {
             pos_x: 0,
             pos_y: 0,
@@ -76,7 +139,7 @@ impl VgaTextModeWriter {
     }
 
     /// Clears whole screen.
-    pub fn clear_screen(&self) {
+    fn clear_screen(&self) {
         for y in 0..VGA_TEXT_MODE_HEIGHT {
             for x in 0..VGA_TEXT_MODE_WIDTH {
                 unsafe {
@@ -88,7 +151,7 @@ impl VgaTextModeWriter {
     }
 
     /// Clears given row.
-    pub fn clear_line(&self, row: usize) {
+    fn clear_line(&self, row: usize) {
         if row >= VGA_TEXT_MODE_HEIGHT {
             // TODO report error
             return;
@@ -102,21 +165,21 @@ impl VgaTextModeWriter {
     }
 
     /// Sets foreground color of next printed text.
-    pub fn set_fg_color(&mut self, color: VgaTextModeColor) {
+    fn set_fg_color(&mut self, color: VgaTextModeColor) {
         let b = color.as_u8();
         // Apply to current attribute value, keeping upper part (background color) and upper bit (blinking)
         self.current_attrib = (self.current_attrib & 0xf0) | b;
     }
 
     /// Sets background color of next printed text.
-    pub fn set_bg_color(&mut self, color: VgaTextModeColor) {
+    fn set_bg_color(&mut self, color: VgaTextModeColor) {
         let b = color.as_u8() << 4;
         // Apply to current attribute value, keeping the lower part (foreground color) and upper bit (blinking)
         self.current_attrib = (self.current_attrib & 0x8f) | b;
     }
 
     /// Sets all attributes to new values.
-    pub fn set_attrib(
+    fn set_attrib(
         &mut self,
         bg_color: VgaTextModeColor,
         fg_color: VgaTextModeColor,
@@ -126,7 +189,7 @@ impl VgaTextModeWriter {
     }
 
     /// Scrolls text by given ammount.
-    pub fn scroll_by(&self, count: usize) {
+    fn scroll_by(&self, count: usize) {
         // If count is more than or equal to VGA text mode height, simply clear screen and exit.
         if count >= VGA_TEXT_MODE_HEIGHT {
             self.clear_screen();
@@ -158,7 +221,7 @@ impl VgaTextModeWriter {
     /// cursor is moved to beginning of next line.
     /// If new character would go out of column (current Y position >= VGA_TEXT_MODE_HEIGHT),
     /// entire screen is scrolled.
-    pub fn write_char(&mut self, c: u8) {
+    fn write_char(&mut self, c: u8) {
         if self.pos_x >= VGA_TEXT_MODE_WIDTH {
             // Go to next line's beginning
             self.pos_y += 1;
@@ -186,9 +249,28 @@ impl VgaTextModeWriter {
         }
     }
 
-    pub fn write_text(&mut self, text: &[u8]) {
+    fn write_text(&mut self, text: &[u8]) {
         for c in text {
             self.write_char(*c);
         }
+    }
+
+    /// Moves cursor to specified X and Y if provided.
+    fn set_cursor(&mut self, x: Option<usize>, y: Option<usize>) -> bool {
+        if let Some(px) = x {
+            if px < VGA_TEXT_MODE_WIDTH {
+                self.pos_x = px;
+            } else {
+                return false;
+            }
+        }
+        if let Some(py) = y {
+            if py < VGA_TEXT_MODE_HEIGHT {
+                self.pos_y = py;
+            } else {
+                return false;
+            }
+        }
+        return true;
     }
 }
