@@ -4,6 +4,7 @@
 
 mod guru;
 mod interrupts;
+mod keyboard;
 mod multiboot;
 mod pic;
 mod port;

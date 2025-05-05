@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
-use crate::{pic::{end_of_interrupt, IRQ}, vga::vga_print_char, vga_printf};
+use crate::{keyboard::Key, pic::{end_of_interrupt, IRQ}, vga::vga_print_char, vga_printf};
 
 
 lazy_static! {
@@ -34,11 +34,21 @@ extern "x86-interrupt" fn timer_interrupt(stack_frame: InterruptStackFrame) {
 }
 
 extern "x86-interrupt" fn keyboard_interrupt(stack_frame: InterruptStackFrame) {
-    // retrieving character scancode
+    // retrieving character scancode from PS/2 keyboard port
     let scancode: u8 = unsafe {
         let mut p = x86_64::instructions::port::Port::new(0x60);
         p.read()
     };
-    vga_printf!("{}", scancode);
+    // adding key to key buffer
+    crate::keyboard::_push_key(scancode);
+    // try translating key buffer into key
+    if let Some(k) = crate::keyboard::translate_key() {
+        if let Key::Char(c) = k {
+            vga_printf!("{}", c as char);
+        } else {
+            vga_printf!("Special {:?}", k);
+        }
+    }
+    // signal end of interrupt
     end_of_interrupt(IRQ::Keyboard);
 }
