@@ -1,5 +1,9 @@
 use lazy_static::lazy_static;
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
+use x86_64::structures::idt::{
+    InterruptDescriptorTable,
+    InterruptStackFrame,
+    PageFaultErrorCode
+};
 
 use crate::{keyboard::Key, pic::{end_of_interrupt, IRQ}, vga::vga_print_char, vga_printf};
 
@@ -9,6 +13,7 @@ lazy_static! {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint_handler);
         idt.double_fault.set_handler_fn(double_fault_handler);
+        idt.page_fault.set_handler_fn(page_fault_handler);
         idt[IRQ::Timer as u8].set_handler_fn(timer_interrupt);
         idt[IRQ::Keyboard as u8].set_handler_fn(keyboard_interrupt);
         idt
@@ -16,6 +21,16 @@ lazy_static! {
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
+}
+
+extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, err: PageFaultErrorCode) {
+    // Control Register 2 stores address that was accessed and caused a page fault
+    let cr2 = {
+        x86_64::registers::control::Cr2::read()
+    };
+    vga_printf!("PAGE FAULT CAUSED BY {:?}, error {:?}\n", cr2, err);
+    vga_printf!("Stack trace : {:?}", stack_frame);
+    loop {}
 }
 
 extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, error_code: u64) -> !

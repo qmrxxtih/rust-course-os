@@ -17,7 +17,7 @@ section .rodata
 longmode_gdt:
   dq 0 ; zero entry
 gdt_code: equ $ - longmode_gdt
-  dq (1<<43) | (1<<44) | (1<<47) | (1<<53) ; code segment
+  dq 0x20980000000000 ; code segment
 gdt_pointer:
   dw $ - longmode_gdt - 1
   dq longmode_gdt
@@ -96,8 +96,7 @@ _map_pd:
   ; load new GDT
   lgdt [gdt_pointer]
 
-  mov dword [0xb8000],0x2f4b2f4f
-
+  ; jump to new code address
   jmp gdt_code:start_lm
 
 longmode_unavailable:
@@ -105,4 +104,3 @@ cpuid_unavailable:
 invalid_boot:
   jmp invalid_boot ;loop on error
   
-
