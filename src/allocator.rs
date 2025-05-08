@@ -1,8 +1,6 @@
 
 
-use alloc::alloc::{GlobalAlloc, Layout};
 use crate::multiboot;
-use core::ptr::null_mut;
 use x86_64::structures::paging as Paging;
 
 
@@ -52,12 +50,9 @@ unsafe impl<'a> Paging::FrameAllocator<Paging::Size4KiB> for NormalFrameAllocato
 }
 
 
-pub struct Dummy;
-
-
 /// Initialise heap address space by allocating and mapping required pages and loading initial
 /// linked list heap allocator.
-/// Heap is allocated on address space from 0x8000.0000.0000, with 100 KiB size.
+/// Heap is allocated on address space from 0x7000 0000 0000, with 1 MiB size.
 pub fn heap_init(
     mapper: &mut impl Paging::Mapper<Paging::Size4KiB>,
     frame_alloc: &mut impl Paging::FrameAllocator<Paging::Size4KiB>
@@ -90,15 +85,4 @@ pub fn heap_init(
     unsafe {GLOBAL_ALLOC.lock().init(KERNEL_HEAP_START as *mut u8, KERNEL_HEAP_SIZE as usize)};
 
     Ok(())
-}
-
-
-unsafe impl GlobalAlloc for Dummy {
-    unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
-        null_mut()
-    }
-
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
-        panic!("dealloc should be never called")
-    }
 }

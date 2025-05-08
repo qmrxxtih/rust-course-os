@@ -38,6 +38,7 @@ pub fn _push_key(c: u8) {
 }
 
 
+/// Translates the content of scancode buffer into key state.
 pub fn translate_key() -> Option<KeyState> {
     let mut lock = KEY_BUFFER.lock();
     let k = match lock.as_slice() {
@@ -52,6 +53,8 @@ pub fn translate_key() -> Option<KeyState> {
         // we AND with 0x7F, which will disable the most significant bit (press / release
         // indication)
         &[x, _] => match x & 0x7f {
+            // NOTE: SEE FOR COMPLETE SCANCODE MAP:
+            // https://wiki.osdev.org/PS/2_Keyboard#Scan_Code_Set_1
             0x01 => Some(Key::Escape),
             0x02 => Some(Key::Char(b'1')),
             0x03 => Some(Key::Char(b'2')),
