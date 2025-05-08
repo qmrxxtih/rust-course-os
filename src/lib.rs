@@ -3,6 +3,9 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
+extern crate alloc;
+
+mod allocator;
 mod guru;
 mod interrupts;
 mod keyboard;
@@ -43,43 +46,18 @@ const BIG_MINK_2: &str = "
 
 pub struct EmptyFrameAllocator;
 
-use x86_64::structures::paging as Paging;
-
-
-struct NormalFrameAllocator<'a> {
-    mem_map: &'a [multiboot::MemoryMapEntry],
-    next: u64,
-}
-
-
-#[allow(dead_code)]
-impl<'a> NormalFrameAllocator<'a> {
-    fn frame_iter(&self) -> impl Iterator<Item = Paging::PhysFrame> {
-        self
-            .mem_map
-            .iter()
-            .filter(|m| m.typ == multiboot::MemoryMapType::Available)
-            .map(|m| m.base_addr..(m.base_addr+m.length))
-            .flat_map(|m| m.step_by(4096))
-            .map(|m| Paging::PhysFrame::containing_address(x86_64::PhysAddr::new(m)))
-    }
-}
-
-
-unsafe impl<'a> Paging::FrameAllocator<Paging::Size4KiB> for NormalFrameAllocator<'a> {
-    fn allocate_frame(&mut self) -> Option<Paging::PhysFrame> {
-        let frame = self
-            .frame_iter()
-            .nth(self.next as usize);
-        self.next += 1;
-        frame
-    }
-}
-
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
+    // getting basic information using multiboot2 standard
     let mbi = Multiboot2::from_ptr(multiboot_addr as *const u32);
+    // retrieve memory areas identified by underlying bootloader
+    let mem_map = Multiboot2::from_ptr(multiboot_addr as *const u32)
+        .into_iter()
+        .filter_map(|x| if let Tag::MemoryMap(m) = x { Some(m) } else { None })
+        .next()
+        .expect("Memory map not found!");
+
 
     // Initialising interrupt vector by loading IDT (Interrupt Descriptor Table)
     init_idt();
@@ -87,6 +65,10 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     pic::init();
     // Enabling external interrupts by calling STI (set interrupt) instruction
     x86_64::instructions::interrupts::enable();
+    // initialise heap memory
+    let mut mapper = paging::get_page_mapper(None);
+    let mut frame_alloc = allocator::NormalFrameAllocator::new(&mem_map);
+    allocator::heap_init(&mut mapper, &mut frame_alloc).expect("heap memory init failed!");
 
     // Disable blinking cursor by writing VGA control registers
     output_byte(0x3D4, 0x0A);
@@ -106,12 +88,6 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
         .next()
         .expect("Kernel base address not found!");
 
-    // retrieve memory areas identified by underlying bootloader
-    let mem_map = Multiboot2::from_ptr(multiboot_addr as *const u32)
-        .into_iter()
-        .filter_map(|x| if let Tag::MemoryMap(m) = x { Some(m) } else { None })
-        .next()
-        .expect("Memory map not found!");
 
     // retrieve largest memory area available for use
     let largest_area = mem_map
@@ -122,10 +98,19 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
         ;
     vga_printf!("Largest available memory area : {:?}\n", largest_area);
 
+    let mut vec = alloc::vec::Vec::new();
+    for i in 0..5 {
+        vec.push(i * 10);
+    }
+    vga_printf!("CONTENT OF HEAP VECTOR : {:?}\n", vec);
+
     loop {}
 }
 
 #[panic_handler]
 fn panic_handler(info: &PanicInfo) -> ! {
-    guru::guru_panic(&info)
+    vga::vga_clear_screen();
+    vga_printf!("RECEIVED PANIC SIGNAL : {:?}", info);
+    loop {}
+    // guru::guru_panic(&info)
 }

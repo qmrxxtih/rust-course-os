@@ -20,8 +20,15 @@ lazy_static! {
     };
 }
 
+
+pub fn init_idt() {
+    IDT.load();
+}
+
+
 extern "x86-interrupt" fn breakpoint_handler(_stack_frame: InterruptStackFrame) {
 }
+
 
 extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, err: PageFaultErrorCode) {
     // Control Register 2 stores address that was accessed and caused a page fault
@@ -33,13 +40,10 @@ extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, e
     loop {}
 }
 
+
 extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, error_code: u64) -> !
 {
     panic!("EXCEPTION: DOUBLE FAULT {} :: {:#?}", error_code, stack_frame);
-}
-
-pub fn init_idt() {
-    IDT.load();
 }
 
 
@@ -47,6 +51,7 @@ extern "x86-interrupt" fn timer_interrupt(_stack_frame: InterruptStackFrame) {
     // vga_print_char(b'.');
     end_of_interrupt(IRQ::Timer);
 }
+
 
 extern "x86-interrupt" fn keyboard_interrupt(_stack_frame: InterruptStackFrame) {
     // retrieving character scancode from PS/2 keyboard port

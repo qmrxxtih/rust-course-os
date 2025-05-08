@@ -20,7 +20,7 @@ use x86_64::structures::paging as Paging;
 use crate::vga_printf;
 
 
-/// Map huge page to given physical memory frame using given mapper with given flags.
+/// Map given huge page to given physical memory frame using given mapper with given flags.
 #[allow(unused)]
 pub fn map_huge_page(
     page: Paging::Page<Paging::Size2MiB>,
