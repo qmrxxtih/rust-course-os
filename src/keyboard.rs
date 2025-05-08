@@ -10,11 +10,17 @@ pub enum Key {
     LeftShift,
     RightShift,
     LeftCtrl,
-    RightCtrl,
+    // RightCtrl,
     CapsLock,
     LeftAlt,
-    RightAlt,
+    // RightAlt,
     Char(u8),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct KeyState {
+    pub key: Key,
+    pub state: bool,
 }
 
 lazy_static! {
@@ -31,7 +37,8 @@ pub fn _push_key(c: u8) {
     }
 }
 
-pub fn translate_key() -> Option<Key> {
+
+pub fn translate_key() -> Option<KeyState> {
     let mut lock = KEY_BUFFER.lock();
     let k = match lock.as_slice() {
         // we AND with 0x7F, which will disable the most significant bit (press / release
@@ -103,12 +110,24 @@ pub fn translate_key() -> Option<Key> {
             0x38 => Some(Key::LeftAlt),
             0x39 => Some(Key::Char(b' ')),
             0x3A => Some(Key::CapsLock),
-            _ => None,
+            _ => return None,
         },
-        _ => None,
+        _ => return None,
     };
+    let result = if let Some(key) = k {
+        let key_pressed = if lock[0] == 0xe0 {
+            lock[1] & 0x80 == 0x00
+        } else {
+            lock[0] & 0x80 == 0x00
+        };
+        Some(KeyState { key, state: key_pressed })
+    } else {
+        None
+    };
+
     lock[0] = 0x00;
     lock[1] = 0x00;
-    k
+
+    result
 }
 

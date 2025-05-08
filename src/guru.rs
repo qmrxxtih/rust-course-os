@@ -1,12 +1,14 @@
 use core::panic::PanicInfo;
 use core::fmt::Write;
 
-use crate::vga::{vga_clear_screen, vga_print, vga_print_char, vga_set_cursor_pos, vga_set_foreground, VgaTextModeWriter};
+use crate::vga::{vga_clear_screen, vga_print, vga_print_char, vga_set_cursor_pos, vga_set_foreground};
+
 
 struct StaticBufferWriter<'a, const N: usize> {
     output_buf: &'a mut [u8;N],
     pos: usize,
 }
+
 
 impl<'a, const N: usize> StaticBufferWriter<'a, N> {
     fn new(buf: &'a mut [u8;N]) -> Self {
@@ -17,6 +19,8 @@ impl<'a, const N: usize> StaticBufferWriter<'a, N> {
     }
 }
 
+
+#[allow(unused)]
 impl<'a, const N: usize> Write for StaticBufferWriter<'a, N> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         let bytes = s.as_bytes();
@@ -41,6 +45,8 @@ impl<'a, const N: usize> Write for StaticBufferWriter<'a, N> {
     }
 }
 
+
+#[allow(unused)]
 fn guru_init() {
     const INIT_POS:usize = 6;
     vga_clear_screen();
@@ -65,6 +71,8 @@ fn guru_init() {
     vga_print("Ouch ... this mink is now dead XnX".as_bytes());
 }
 
+
+#[allow(unused)]
 pub fn guru_print(message: &[u8]) {
     let mut y = 0;
     'print_loop: loop {
@@ -81,6 +89,8 @@ pub fn guru_print(message: &[u8]) {
     }
 }
 
+
+#[allow(unused)]
 pub fn guru_panic(info: &PanicInfo) -> ! {
     guru_init();
     // writing the panic message into buffer
@@ -97,6 +107,7 @@ pub fn guru_panic(info: &PanicInfo) -> ! {
 }
 
 
+#[allow(unused)]
 pub fn guru_error(message: &str) -> ! {
     guru_init();
 

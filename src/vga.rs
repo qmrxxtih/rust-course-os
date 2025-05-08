@@ -24,6 +24,7 @@ lazy_static! {
 }
 
 /// Prints text to VGA buffer using global VGA writer instance.
+#[allow(unused)]
 pub fn vga_print(text: &[u8]) {
     x86_64::instructions::interrupts::without_interrupts(|| {
         VGA.lock().write_text(text);
@@ -31,6 +32,7 @@ pub fn vga_print(text: &[u8]) {
 }
 
 /// Prints single character to VGA buffer using global VGA writer instance.
+#[allow(unused)]
 pub fn vga_print_char(c: u8) {
     x86_64::instructions::interrupts::without_interrupts(|| {
         VGA.lock().write_char(c);
@@ -38,6 +40,7 @@ pub fn vga_print_char(c: u8) {
 }
 
 /// DO NOT USE: Private print function for the macro
+#[allow(unused)]
 pub fn ghost_print(args: core::fmt::Arguments) {
     use core::fmt::Write;
     x86_64::instructions::interrupts::without_interrupts(|| {
@@ -46,6 +49,7 @@ pub fn ghost_print(args: core::fmt::Arguments) {
 }
 
 /// Sets global VGA writer's foreground text color.
+#[allow(unused)]
 pub fn vga_set_foreground(color: VgaTextModeColor) {
     x86_64::instructions::interrupts::without_interrupts(|| {
         VGA.lock().set_fg_color(color);
@@ -53,6 +57,7 @@ pub fn vga_set_foreground(color: VgaTextModeColor) {
 }
 
 /// Sets global VGA writer's background text color.
+#[allow(unused)]
 pub fn vga_set_background(color: VgaTextModeColor) {
     x86_64::instructions::interrupts::without_interrupts(|| {
         VGA.lock().set_bg_color(color);
@@ -60,6 +65,7 @@ pub fn vga_set_background(color: VgaTextModeColor) {
 }
 
 /// Clears screen using global VGA writer.
+#[allow(unused)]
 pub fn vga_clear_screen() {
     x86_64::instructions::interrupts::without_interrupts(|| {
         VGA.lock().clear_screen();
@@ -67,6 +73,7 @@ pub fn vga_clear_screen() {
 }
 
 /// Sets global VGA writer's cursor position.
+#[allow(unused)]
 pub fn vga_set_cursor_pos(x: Option<usize>, y: Option<usize>) {
     x86_64::instructions::interrupts::without_interrupts(|| {
         VGA.lock().set_cursor(x, y);

@@ -18,7 +18,7 @@ longmode_gdt:
   dq 0 ; zero entry
 gdt_code: equ $ - longmode_gdt
   dq 0x20980000000000 ; code segment
-gdt_pointer:
+.gdt_pointer:
   dw $ - longmode_gdt - 1
   dq longmode_gdt
 
@@ -26,8 +26,15 @@ section .text
   global _start
   extern start_lm 
   bits 32
-  extern mink_enter
+
 _start:
+  ; Multiboot2 specification sets up processor into protected mode automatically,
+  ; including enabling of A20 address line.
+  ; However, it is up to programmer to create their own stack, set up paging, 
+  ; set up GDT (global descriptor table) for segments and IDT (interrupt descriptor table)
+  ; for interrupts.
+  ; Basic stack, initial paging, and GDT setup is done here.
+  ; IDT setup and additional initialisation work is done in Rust.
   mov esp,stack_start   ; INITIALISE STACK
   mov edi, ebx          ; 1st argument for Rust program = Multiboot Boot Information
 
@@ -80,27 +87,32 @@ _map_pd:
   jnz _map_pd
 
   ; ENABLE PAGING
-  mov eax,pmap_l4_table 
-  mov cr3,eax ; load page map to cr3 (the page table register)
   mov eax,cr4
-  or eax,0x20
+  or eax,(1 << 5)
   mov cr4,eax ; enable PAE flag in Control Register 4 (physical adress ext.)
+
   mov ecx,0xc0000080
   rdmsr
-  or eax,0x100
+  or eax,(1 << 8)
   wrmsr ; set long mode bit in MSR (model specific register)
+
+  mov eax,pmap_l4_table 
+  mov cr3,eax ; load page map to cr3 (the page table register)
+
   mov eax,cr0
-  or eax,0x80000000
+  or eax,(1 << 31) | (1 << 0)
   mov cr0,eax ; enable paging in Control Register 0
 
-  ; load new GDT
-  lgdt [gdt_pointer]
+  ; LOAD NEW GDT
+  lgdt [longmode_gdt.gdt_pointer]
 
-  ; jump to new code address
+  ; JUMP TO NEW CODE ADDRESS
   jmp gdt_code:start_lm
+
 
 longmode_unavailable:
 cpuid_unavailable:
 invalid_boot:
+  hlt ; halt the processor
   jmp invalid_boot ;loop on error
   

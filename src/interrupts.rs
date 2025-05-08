@@ -5,7 +5,7 @@ use x86_64::structures::idt::{
     PageFaultErrorCode
 };
 
-use crate::{keyboard::Key, pic::{end_of_interrupt, IRQ}, vga::vga_print_char, vga_printf};
+use crate::{keyboard::Key, pic::{end_of_interrupt, IRQ}, vga_printf};
 
 
 lazy_static! {
@@ -20,7 +20,7 @@ lazy_static! {
     };
 }
 
-extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
+extern "x86-interrupt" fn breakpoint_handler(_stack_frame: InterruptStackFrame) {
 }
 
 extern "x86-interrupt" fn page_fault_handler(stack_frame: InterruptStackFrame, err: PageFaultErrorCode) {
@@ -43,12 +43,12 @@ pub fn init_idt() {
 }
 
 
-extern "x86-interrupt" fn timer_interrupt(stack_frame: InterruptStackFrame) {
-    vga_print_char(b'.');
+extern "x86-interrupt" fn timer_interrupt(_stack_frame: InterruptStackFrame) {
+    // vga_print_char(b'.');
     end_of_interrupt(IRQ::Timer);
 }
 
-extern "x86-interrupt" fn keyboard_interrupt(stack_frame: InterruptStackFrame) {
+extern "x86-interrupt" fn keyboard_interrupt(_stack_frame: InterruptStackFrame) {
     // retrieving character scancode from PS/2 keyboard port
     let scancode: u8 = unsafe {
         let mut p = x86_64::instructions::port::Port::new(0x60);
@@ -58,10 +58,8 @@ extern "x86-interrupt" fn keyboard_interrupt(stack_frame: InterruptStackFrame) {
     crate::keyboard::_push_key(scancode);
     // try translating key buffer into key
     if let Some(k) = crate::keyboard::translate_key() {
-        if let Key::Char(c) = k {
+        if let Key::Char(c) = k.key && k.state {
             vga_printf!("{}", c as char);
-        } else {
-            vga_printf!("Special {:?}", k);
         }
     }
     // signal end of interrupt

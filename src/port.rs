@@ -1,24 +1,16 @@
-use core::arch::asm;
 
-// Simple function to output value to given output port
+/// Simple function to output a byte to given output port
+#[allow(unused)]
 pub fn output_byte(addr: u16, val: u8) {
+    let mut port = x86_64::instructions::port::PortWriteOnly::<u8>::new(addr);
     unsafe {
-        asm!(
-            "out dx,al",
-            in("dx") addr,
-            in("al") val
-        )
+        port.write(val);
     }
 }
 
+/// Simple function to read a byte from given input port
+#[allow(unused)]
 pub fn input_byte(addr: u16) -> u8 {
-    let mut value:u8;
-    unsafe {
-        asm!(
-            "in al,dx",
-            in("dx") addr,
-            out("al") value
-        )
-    }
-    value
+    let mut port = x86_64::instructions::port::PortReadOnly::<u8>::new(addr);
+    unsafe { port.read() }
 } 

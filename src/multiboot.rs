@@ -57,7 +57,7 @@ pub struct BootDevice {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MemoryMapType {
     Invalid = 0,
     /// available RAM
@@ -74,9 +74,9 @@ pub enum MemoryMapType {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct MemoryMapEntry {
-    base_addr: u64,
-    length: u64,
-    typ: MemoryMapType,
+    pub base_addr: u64,
+    pub length: u64,
+    pub typ: MemoryMapType,
     reserved: u32,
 }
 
