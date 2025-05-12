@@ -6,6 +6,7 @@
 extern crate alloc;
 
 mod allocator;
+mod r#async;
 mod guru;
 mod interrupts;
 mod keyboard;
@@ -24,6 +25,7 @@ use port::output_byte;
 use vga::{vga_set_foreground, VgaTextModeColor};
 
 
+#[allow(unused)]
 const BIG_MINK: &str = "                   88             88         
                    \"\"             88         
                                   88         
@@ -104,7 +106,18 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     }
     vga_printf!("CONTENT OF HEAP VECTOR : {:?}\n", vec);
 
-    loop {}
+    let mut exec = r#async::Executor::new();
+    exec.spawn(r#async::Task::new(example_task()));
+    exec.run();
+}
+
+async fn asnum() -> u32 {
+    42 + 180 * 5
+}
+
+async fn example_task() {
+    let num = asnum().await;
+    vga_printf!("ASYNC TEST : {}\n", num);
 }
 
 #[panic_handler]
