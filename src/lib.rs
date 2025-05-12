@@ -6,7 +6,8 @@
 extern crate alloc;
 
 mod allocator;
-mod r#async;
+mod asyn;
+mod disk;
 mod guru;
 mod interrupts;
 mod keyboard;
@@ -17,9 +18,7 @@ mod port;
 mod vga;
 
 use core::panic::PanicInfo;
-
 use interrupts::init_idt;
-
 use multiboot::{Multiboot2, Tag};
 use port::output_byte;
 use vga::{vga_set_foreground, VgaTextModeColor};
@@ -106,9 +105,25 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     }
     vga_printf!("CONTENT OF HEAP VECTOR : {:?}\n", vec);
 
-    let mut exec = r#async::Executor::new();
-    exec.spawn(r#async::Task::new(example_task()));
+    let mut buf:[u16;256] = [0;256];
+    if let Some(_) = disk::ata::identify(false, &mut buf) {
+        vga_printf!("DISK IDENTIFIED SUCCESSFULLY!\n");
+    } else {
+        vga_printf!("DISK ID FAIL!!!\n");
+    }
+
+
+
+
+    let mut exec = asyn::Executor::new();
+    exec.spawn(asyn::Task::new(example_task()));
+    exec.spawn(asyn::Task::new(disk_info()));
     exec.run();
+}
+
+async fn disk_info() {
+    // let t = disk::ata::get_device_type(false, disk::ata::DeviceControl::default());
+    // vga_printf!("DISK TYPE : {:?}\n", t);
 }
 
 async fn asnum() -> u32 {
@@ -122,7 +137,7 @@ async fn example_task() {
 
 #[panic_handler]
 fn panic_handler(info: &PanicInfo) -> ! {
-    vga::vga_clear_screen();
+    // vga::vga_clear_screen();
     vga_printf!("RECEIVED PANIC SIGNAL : {:?}", info);
     loop {}
     // guru::guru_panic(&info)

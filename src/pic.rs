@@ -11,6 +11,20 @@ static CHAINED_PICS: spin::Mutex<pic8259::ChainedPics> = spin::Mutex::new(unsafe
 pub enum IRQ {
     Timer = PIC1_OFFSET,
     Keyboard,
+    Cascade,
+    COM2,
+    COM1,
+    LPT2,
+    FloppyDisk,
+    LPT1,
+    CMOSClock,
+    Nic1,
+    Nic2,
+    Nic3,
+    Mouse,
+    Coprocessor,
+    PrimaryATA,
+    SecondaryATA,
 }
 
 pub fn init() {

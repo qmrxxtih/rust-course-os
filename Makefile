@@ -35,7 +35,8 @@ LIB = ${OUTDIR}/custom_target/${TARGET}/libmink.a
 .DEFAULT_GOAL = all
 
 run: all
-	qemu-system-x86_64 -cdrom ${ISO}
+	@if [ ! -f "test.img" ]; then qemu-img create -f qcow2 ${OUTDIR}/test.img 512M; fi
+	qemu-system-x86_64 -cdrom ${ISO} -drive file=${OUTDIR}/test.img,format=qcow2
 
 all: ${ISO}
 

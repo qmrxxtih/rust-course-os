@@ -16,6 +16,8 @@ lazy_static! {
         idt.page_fault.set_handler_fn(page_fault_handler);
         idt[IRQ::Timer as u8].set_handler_fn(timer_interrupt);
         idt[IRQ::Keyboard as u8].set_handler_fn(keyboard_interrupt);
+        idt[IRQ::PrimaryATA as u8].set_handler_fn(ata_prim_handler);
+        idt[IRQ::SecondaryATA as u8].set_handler_fn(ata_sec_handler);
         idt
     };
 }
@@ -23,6 +25,16 @@ lazy_static! {
 
 pub fn init_idt() {
     IDT.load();
+}
+
+extern "x86-interrupt" fn ata_sec_handler(_stack_frame: InterruptStackFrame) {
+    vga_printf!("ATA SECONDARY!\n");
+    end_of_interrupt(IRQ::SecondaryATA);
+}
+
+extern "x86-interrupt" fn ata_prim_handler(_stack_frame: InterruptStackFrame) {
+    vga_printf!("ATA PRIMARY!\n");
+    end_of_interrupt(IRQ::PrimaryATA);
 }
 
 

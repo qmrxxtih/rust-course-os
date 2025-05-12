@@ -99,15 +99,13 @@ impl Executor {
 
     /// Calls HALT instruction if task queue is empty, freeing up load from the processor.
     fn idle_sleep(&self) {
+        use x86_64::instructions::interrupts as Interrupts;
         // interrupts cannot happen!
-        let mut x = false;
-        x86_64::instructions::interrupts::without_interrupts(|| {
-            if self.queue.is_empty() {
-                x = true
-            }
-        });
-        if x {
-            x86_64::instructions::hlt();
+        Interrupts::disable();
+        if self.queue.is_empty() {
+            Interrupts::enable_and_hlt();
+        } else {
+            Interrupts::enable();
         }
     }
 
