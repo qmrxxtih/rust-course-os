@@ -229,30 +229,45 @@ impl VgaTextModeWriter {
     /// If new character would go out of column (current Y position >= VGA_TEXT_MODE_HEIGHT),
     /// entire screen is scrolled.
     fn write_char(&mut self, c: u8) {
-        if self.pos_x >= VGA_TEXT_MODE_WIDTH {
-            // Go to next line's beginning
-            self.pos_y += 1;
-            self.pos_x = 0;
-        }
-        if self.pos_y >= VGA_TEXT_MODE_HEIGHT {
-            // Scroll by number of columns out of range
-            let scroll = self.pos_y - VGA_TEXT_MODE_HEIGHT + 1;
-            self.scroll_by(scroll);
-            self.pos_y -= scroll;
-        }
-        let offset = 2 * self.pos_y * VGA_TEXT_MODE_WIDTH + 2 * self.pos_x;
-        let attr_ptr: *mut u8 = (VGA_TEXT_ADDR + 1 + offset) as *mut u8;
-        let char_ptr: *mut u8 = (VGA_TEXT_ADDR + offset) as *mut u8;
-
-        if c == b'\n' {
-            self.pos_y += 1;
-            self.pos_x = 0;
-        } else {
-            unsafe {
-                *attr_ptr = self.current_attrib;
-                *char_ptr = c;
+        match c {
+            0x08 => { // Backspace
+                if self.pos_x > 0 {
+                    self.pos_x -= 1;
+                    let offset = 2 * self.pos_y * VGA_TEXT_MODE_WIDTH + 2 * self.pos_x;
+                    unsafe {
+                        *((VGA_TEXT_ADDR + offset) as *mut u8) = b' '; // Clear the character
+                        *((VGA_TEXT_ADDR + offset + 1) as *mut u8) = self.current_attrib;
+                    }
+                } else if self.pos_y > 0 {
+                    self.pos_y -= 1;
+                    self.pos_x = VGA_TEXT_MODE_WIDTH - 1;
+                    let offset = 2 * self.pos_y * VGA_TEXT_MODE_WIDTH + 2 * self.pos_x;
+                    unsafe {
+                        *((VGA_TEXT_ADDR + offset) as *mut u8) = b' '; // Clear the character
+                        *((VGA_TEXT_ADDR + offset + 1) as *mut u8) = self.current_attrib;
+                    }
+                }
+            },
+            b'\n' => {
+                self.pos_y += 1;
+                self.pos_x = 0;
+            },
+            _ => {
+                if self.pos_x >= VGA_TEXT_MODE_WIDTH {
+                    self.pos_y += 1;
+                    self.pos_x = 0;
+                }
+                if self.pos_y >= VGA_TEXT_MODE_HEIGHT {
+                    self.scroll_by(1);
+                    self.pos_y = VGA_TEXT_MODE_HEIGHT - 1;
+                }
+                let offset = 2 * self.pos_y * VGA_TEXT_MODE_WIDTH + 2 * self.pos_x;
+                unsafe {
+                    *((VGA_TEXT_ADDR + offset) as *mut u8) = c;
+                    *((VGA_TEXT_ADDR + offset + 1) as *mut u8) = self.current_attrib;
+                }
+                self.pos_x += 1;
             }
-            self.pos_x += 1;
         }
     }
 

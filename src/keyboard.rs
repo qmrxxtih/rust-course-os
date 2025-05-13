@@ -1,7 +1,7 @@
 
 use lazy_static::lazy_static;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Key {
     Backspace,
     Tab,
@@ -25,6 +25,11 @@ pub struct KeyState {
 
 lazy_static! {
     static ref KEY_BUFFER: spin::Mutex<[u8;2]> = spin::Mutex::new([0u8;2]);
+}
+
+pub fn has_key_event() -> bool {
+    let lock = KEY_BUFFER.lock();
+    lock[0] != 0 || lock[1] != 0
 }
 
 pub fn _push_key(c: u8) {
