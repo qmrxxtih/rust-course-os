@@ -6,6 +6,8 @@ const fn addr_align(addr: usize, alignment: usize) -> usize {
     ((addr + alignment - 1) & !(alignment - 1))
 }
 
+pub static mut MULTIBOOT_INFO_ADDR: usize = 0;
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
 pub enum TagType {
