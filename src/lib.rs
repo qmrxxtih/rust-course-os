@@ -106,7 +106,7 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     vga_printf!("CONTENT OF HEAP VECTOR : {:?}\n", vec);
 
     vga::vga_clear_screen();
-    vga_set_foreground(VgaTextModeColor::LightGreen);
+    vga_set_foreground(VgaTextModeColor::LightBlue);
     vga_printf!("{}", BIG_MINK_2);
     vga_set_foreground(VgaTextModeColor::White);
     vga_printf!("MinkOS ready. Starting shell...\n\n");

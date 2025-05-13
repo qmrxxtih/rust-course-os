@@ -14,6 +14,8 @@ pub enum Key {
     CapsLock,
     LeftAlt,
     // RightAlt,
+    Up,
+    Down,
     Char(u8),
 }
 
@@ -53,6 +55,8 @@ pub fn translate_key() -> Option<KeyState> {
             // escaped key not registered, return without further action
             0x00 => return None,
             // TODO match escaped characters
+            0x48 => Some(Key::Up),    // Up arrow
+            0x50 => Some(Key::Down),  // Down arrow
             _ => None,
         },
         // we AND with 0x7F, which will disable the most significant bit (press / release
