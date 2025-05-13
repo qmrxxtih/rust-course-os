@@ -34,6 +34,8 @@ LIB = ${OUTDIR}/custom_target/${TARGET}/libmink.a
 
 .DEFAULT_GOAL = all
 
+QEMU_FLAGS += -device isa-debug-exit,iobase=0xf4,iosize=0x04 -no-reboot
+
 run: all
 	@if [ ! -f "test.img" ]; then qemu-img create -f qcow2 ${OUTDIR}/test.img 512M; fi
 	qemu-system-x86_64 -cdrom ${ISO} -drive file=${OUTDIR}/test.img,format=qcow2
