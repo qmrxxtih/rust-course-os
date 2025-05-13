@@ -10,6 +10,8 @@ pub struct Shell {
     buffer: Vec<u8>,
     command_history: Vec<String>,
     history_index: usize,
+    last_key: Option<Key>,
+    repeat_counter: u8,
 }
 
 impl Shell {
