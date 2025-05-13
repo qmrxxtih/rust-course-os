@@ -14,6 +14,7 @@ mod paging;
 mod pic;
 mod port;
 mod vga;
+mod shell;
 
 use core::panic::PanicInfo;
 
@@ -103,6 +104,17 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
         vec.push(i * 10);
     }
     vga_printf!("CONTENT OF HEAP VECTOR : {:?}\n", vec);
+
+    vga::vga_clear_screen();
+    vga_set_foreground(VgaTextModeColor::LightGreen);
+    vga_printf!("{}", BIG_MINK_2);
+    vga_set_foreground(VgaTextModeColor::White);
+    vga_printf!("MinkOS ready. Starting shell...\n\n");
+
+    // Initialize and run shell
+    let mut shell = shell::Shell::new();
+    shell.run();
+
 
     loop {}
 }

@@ -54,19 +54,10 @@ extern "x86-interrupt" fn timer_interrupt(_stack_frame: InterruptStackFrame) {
 
 
 extern "x86-interrupt" fn keyboard_interrupt(_stack_frame: InterruptStackFrame) {
-    // retrieving character scancode from PS/2 keyboard port
     let scancode: u8 = unsafe {
         let mut p = x86_64::instructions::port::Port::new(0x60);
         p.read()
     };
-    // adding key to key buffer
     crate::keyboard::_push_key(scancode);
-    // try translating key buffer into key
-    if let Some(k) = crate::keyboard::translate_key() {
-        if let Key::Char(c) = k.key && k.state {
-            vga_printf!("{}", c as char);
-        }
-    }
-    // signal end of interrupt
     end_of_interrupt(IRQ::Keyboard);
 }
