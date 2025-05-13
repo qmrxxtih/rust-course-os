@@ -20,7 +20,7 @@ use core::panic::PanicInfo;
 
 use interrupts::init_idt;
 
-use multiboot::{Multiboot2, Tag};
+pub use multiboot::{Multiboot2, MemoryMapType, MemoryMapEntry, Tag};
 use port::output_byte;
 use vga::{vga_set_foreground, VgaTextModeColor};
 
@@ -47,9 +47,11 @@ const BIG_MINK_2: &str = "
 
 pub struct EmptyFrameAllocator;
 
-
 #[unsafe(no_mangle)]
 pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
+    unsafe {
+        multiboot::MULTIBOOT_INFO_ADDR = multiboot_addr;
+    }
     // getting basic information using multiboot2 standard
     let mbi = Multiboot2::from_ptr(multiboot_addr as *const u32);
     // retrieve memory areas identified by underlying bootloader

@@ -2,15 +2,14 @@
 use alloc::{string::ToString, string::String, vec::Vec};
 use crate::{
     keyboard::{self, Key, KeyState},
-    vga::{vga_print_char, vga_print, vga_clear_screen, vga_set_foreground, VgaTextModeColor}
+    vga::{vga_print_char, vga_print, vga_clear_screen, vga_set_foreground, VgaTextModeColor},
+    Multiboot2, MemoryMapType, MemoryMapEntry, Tag,
 };
 
 pub struct Shell {
     buffer: Vec<u8>,
     command_history: Vec<String>,
     history_index: usize,
-    last_key: Option<Key>,
-    repeat_counter: u8,
 }
 
 impl Shell {
@@ -151,6 +150,7 @@ impl Shell {
             "help" => self.show_help(),
             "clear" => self.clear_screen(),
             "poweroff" => self.poweroff(),
+            "multiboot" => self.show_multiboot_info(),
             cmd if cmd.starts_with("echo ") => self.echo(&cmd[5..]),
             _ => self.unknown_command(cmd),
         }
@@ -161,7 +161,6 @@ impl Shell {
         
         // Method 1: QEMU shutdown with exit code
         unsafe {
-            // 0x31 is the magic exit code for QEMU's isa-debug-exit device
             // Writing to port 0xf4 will make QEMU exit with status (0x31 << 1) | 1 = 99
             x86_64::instructions::port::Port::new(0xf4).write(0x31 as u8);
         }
@@ -184,7 +183,9 @@ impl Shell {
         vga_print(b"- help: Show this help\n");
         vga_print(b"- echo <text>: Print text\n");
         vga_print(b"- clear: Clear screen\n");
-        //TODO: add poweroff if works
+        vga_print(b"- multiboot: Display multiboot information\n");
+        vga_print(b"- poweroff: Turn off\n");
+        //TODO: add multiboot info if works
     }
 
     fn clear_screen(&self) {
@@ -211,5 +212,158 @@ impl Shell {
         vga_print(b"Unknown command: ");
         vga_print(cmd.as_bytes());
         vga_print(b"\n");
+    }
+
+    fn show_multiboot_info(&self) {
+        // Get the multiboot information (same way as in lib.rs)
+        let mb_info = unsafe {
+            if crate::multiboot::MULTIBOOT_INFO_ADDR == 0 {
+                vga_print(b"No multiboot information available\n");
+                return;
+            }
+            Multiboot2::from_ptr(crate::multiboot::MULTIBOOT_INFO_ADDR as *const u32)
+        };
+        
+        vga_print(b"Multiboot Information:\n");
+        vga_print(b"=====================\n");
+        vga_print(b"Total size: ");
+        self.print_u32(mb_info.total_size);
+        vga_print(b" bytes\n");
+        vga_print(b"Reserved: ");
+        self.print_u32(mb_info.reserved);
+        vga_print(b"\n\n");
+
+        for tag in mb_info {
+            match tag {
+                Tag::BootCommandLine(cmd) => {
+                    vga_print(b"Command Line: ");
+                    vga_print(cmd);
+                    vga_print(b"\n");
+                },
+                Tag::BootLoaderName(name) => {
+                    vga_print(b"Boot Loader: ");
+                    vga_print(name);
+                    vga_print(b"\n");
+                },
+                Tag::MemoryMap(entries) => {
+                    vga_print(b"Memory Map (");
+                    self.print_usize(entries.len());
+                    vga_print(b" entries):\n");
+                    for entry in entries {
+                        self.print_memory_map_entry(entry);
+                    }
+                },
+                Tag::Modules { mod_start, mod_end, string } => {
+                    vga_print(b"Module: Addr=0x");
+                    self.print_u32_hex(mod_start);
+                    vga_print(b"-0x");
+                    self.print_u32_hex(mod_end);
+                    vga_print(b", Cmd: ");
+                    vga_print(string);
+                    vga_print(b"\n");
+                },
+                Tag::ImgLoadBaseAddr(addr) => {
+                    vga_print(b"Kernel Load Address: 0x");
+                    self.print_u32_hex(addr);
+                    vga_print(b"\n");
+                },
+                _ => {
+                }
+            }
+        }
+    }
+
+    fn print_memory_map_entry(&self, entry: &MemoryMapEntry) {
+        vga_print(b"  Region: Addr=0x");
+        self.print_u64_hex(entry.base_addr);
+        vga_print(b", Len=0x");
+        self.print_u64_hex(entry.length);
+        vga_print(b" (");
+        self.print_u64(entry.length / 1024);
+        vga_print(b" KB), Type=");
+        
+        match entry.typ {
+            MemoryMapType::Available => vga_print(b"Available"),
+            MemoryMapType::Reserved => vga_print(b"Reserved"),
+            MemoryMapType::AcpiInfo => vga_print(b"ACPI Info"),
+            MemoryMapType::HiberPreserve => vga_print(b"Hibernate Preserve"),
+            MemoryMapType::Defective => vga_print(b"Defective RAM"),
+            _ => vga_print(b"Unknown"),
+        }
+        
+        vga_print(b"\n");
+    }
+
+    // Helper functions for printing numbers
+    fn print_u32(&self, num: u32) {
+        let mut buffer = [0u8; 12];
+        let mut i = 0;
+        let mut n = num;
+        
+        if n == 0 {
+            vga_print(b"0");
+            return;
+        }
+        
+        while n > 0 {
+            buffer[i] = b'0' + (n % 10) as u8;
+            n /= 10;
+            i += 1;
+        }
+        
+        for j in (0..i).rev() {
+            vga_print_char(buffer[j]);
+        }
+    }
+
+    fn print_u32_hex(&self, num: u32) {
+        const HEX_DIGITS: &[u8] = b"0123456789ABCDEF";
+        let mut started = false;
+        
+        for shift in (0..32).step_by(4).rev() {
+            let nibble = (num >> shift) & 0xF;
+            if nibble != 0 || started || shift == 0 {
+                vga_print_char(HEX_DIGITS[nibble as usize]);
+                started = true;
+            }
+        }
+    }
+
+    fn print_u64(&self, num: u64) {
+        let mut buffer = [0u8; 20];
+        let mut i = 0;
+        let mut n = num;
+        
+        if n == 0 {
+            vga_print(b"0");
+            return;
+        }
+        
+        while n > 0 {
+            buffer[i] = b'0' + (n % 10) as u8;
+            n /= 10;
+            i += 1;
+        }
+        
+        for j in (0..i).rev() {
+            vga_print_char(buffer[j]);
+        }
+    }
+
+    fn print_u64_hex(&self, num: u64) {
+        const HEX_DIGITS: &[u8] = b"0123456789ABCDEF";
+        let mut started = false;
+        
+        for shift in (0..64).step_by(4).rev() {
+            let nibble = (num >> shift) & 0xF;
+            if nibble != 0 || started || shift == 0 {
+                vga_print_char(HEX_DIGITS[nibble as usize]);
+                started = true;
+            }
+        }
+    }
+
+    fn print_usize(&self, num: usize) {
+        self.print_u64(num as u64);
     }
 }
