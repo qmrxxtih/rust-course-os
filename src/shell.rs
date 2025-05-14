@@ -1,9 +1,7 @@
 // src/shell.rs
 use alloc::{string::ToString, string::String, vec::Vec};
 use crate::{
-    keyboard::{self, Key, KeyState},
-    vga::{vga_print_char, vga_print, vga_clear_screen, vga_set_foreground, VgaTextModeColor},
-    Multiboot2, MemoryMapType, MemoryMapEntry, Tag,
+    disk, keyboard::{self, Key, KeyState}, vga::{vga_clear_screen, vga_print, vga_print_char, vga_set_foreground, VgaTextModeColor}, vga_printf, MemoryMapEntry, MemoryMapType, Multiboot2, Tag
 };
 
 pub struct Shell {
@@ -154,9 +152,224 @@ impl Shell {
             "poweroff" => self.poweroff(),
             "multiboot" => self.show_multiboot_info(),
             cmd if cmd.starts_with("echo ") => self.echo(&cmd[5..]),
+            cmd if cmd.starts_with("write ") => self.write_disk(&cmd[6..]),
+            cmd if cmd.starts_with("read ") => self.read_disk(&cmd[5..]),
+            cmd if cmd.starts_with("execute ") => self.execute_disk(&cmd[7..]),
             _ => self.unknown_command(cmd),
         }
     }
+
+    fn print_disk_usage(&self, cmd: &str) {
+        vga_set_foreground(VgaTextModeColor::LightYellow);
+        vga_printf!("usage : {cmd} <address> [count (read only)] [content (write only)]\n");
+        vga_set_foreground(VgaTextModeColor::White);
+    }
+
+    fn read_disk(&self, args: &str) {
+        let mut sp = args.split_whitespace();
+        // get address argument
+        let addr = match sp.next() {
+            Some(a) => match a.parse::<u32>() {
+                Ok(val) => val,
+                Err(_) => {
+                    vga_printf!("Invalid address!\n");
+                    return;
+                }
+            },
+            None => {
+                self.print_disk_usage("read");
+                return;
+            }
+        };
+        // get number of bytes argument
+        let count = match sp.next() {
+            Some(c) => match c.parse::<usize>() {
+                Ok(val) => val,
+                Err(_) => {
+                    vga_printf!("Invalid count!\n");
+                    return;
+                }
+            },
+            None => {
+                self.print_disk_usage("read");
+                return;
+            }
+        };
+        // if count is higher than sector size (512 B), split and execute over multiple
+        let iter_count = count / 512;
+        let leftover = count % 512;
+
+        let disk_port = disk::pio::DiskPort::default();
+        let mut output_buf = [0;256];
+
+        // print all full sectors
+        for i in 0..iter_count {
+            unsafe {crate::disk::pio::read_sector_lba28(disk_port, false, addr + i as u32, &mut output_buf);}
+            let bytes = output_buf.iter().map(|x| x.to_le_bytes()).flatten().take(512);
+            for b in bytes {
+                let c = b as char;
+                if c.is_alphanumeric() {
+                    vga_printf!("{c}");
+                }
+                else if c.is_whitespace() {
+                    vga_printf!("{c}");
+                }
+                else {
+                    vga_printf!(" {:02X} ", b);
+                }
+            }
+        }
+        // print the last partial sectors
+        unsafe {crate::disk::pio::read_sector_lba28(disk_port, false, addr + iter_count as u32, &mut output_buf)};
+        let bytes = output_buf.iter().map(|x| x.to_le_bytes()).flatten().take(leftover);
+        for b in bytes {
+            let c = b as char;
+            if c.is_alphanumeric() {
+                vga_printf!("{c}");
+            }
+            else if c.is_whitespace() {
+                vga_printf!("{c}");
+            }
+            else {
+                vga_printf!(" {:02X} ", b);
+            }
+        }
+
+        // print newline
+        vga_printf!("\n");
+    }
+
+    fn write_disk(&self, args: &str) {
+        let mut sp = args.split_whitespace();
+        let addr = match sp.next() {
+            Some(a) => match a.parse::<u32>() {
+                Ok(val) => val,
+                Err(_) => {
+                    vga_printf!("Invalid address!\n");
+                    return;
+                }
+            },
+            None => {
+                self.print_disk_usage("write");
+                return;
+            }
+        };
+
+        // convert rest of arguments into data to write (ASCII most likely)
+        let data = {
+            let mut x = String::new();
+            // this is really stupid way to do this, since whitespace information is lost and
+            // fix-replaced with ' ', but it is what it is lol
+            for s in sp {
+                x.push_str(s);
+                x.push(' ');
+            }
+            x.as_str().replace("\\n", "\n")
+        };
+        let mut data_words = data
+            .as_bytes()
+            .chunks(2)
+            .map(|c| {
+            let high = c.get(0).unwrap_or(&0x00);
+            let low = c.get(1).unwrap_or(&0x00);
+            let bfinal: u16 = ((*low as u16) << 8) | *high as u16;
+            bfinal
+        })
+        .collect::<Vec<u16>>();
+        // chunk MUST be at least 512 B
+        if data_words.len() < 256 {
+            data_words.resize(256, 0);
+        }
+        // split into chunks with size equal to 512 B (1 sector size)
+        let chunks = data_words
+            .as_mut_slice()
+            .chunks_mut(256);
+
+        // write to disk
+        let disk_port = disk::pio::DiskPort::default();
+        let mut successful = 0;
+        for (i, chunk) in chunks.enumerate() {
+            if unsafe {crate::disk::pio::write_sector_lba28(disk_port, false, addr + i as u32, chunk) } {
+                successful += 1;
+            } else {
+                vga_printf!("FAIL!\n");
+                break;
+            }
+        }
+        vga_printf!("successfully wrote {successful} disk sectors ({} bytes)\n", data.len());
+    }
+
+
+    fn execute_disk(&mut self, args: &str) {
+        // split arguments
+        let mut sp = args.split_whitespace();
+        // retrieve disk address
+        let addr = match sp.next() {
+            Some(a) => match a.parse::<u32>() {
+                Ok(val) => val,
+                Err(_) => {
+                    vga_printf!("Invalid address value!");
+                    return;
+                }
+            },
+            None => {
+                self.print_disk_usage("execute");
+                return;
+            }
+        };
+        let count = match sp.next() {
+            Some(c) => match c.parse::<u32>() {
+                Ok(val) => val,
+                Err(_) => {
+                    vga_printf!("Invalid count value!");
+                    return;
+                }
+            },
+            None => {
+                self.print_disk_usage("execute");
+                return;
+            }
+        };
+        // if count is higher than sector size (512 B), split and execute over multiple
+        let iter_count = count / 512;
+        let leftover = count % 512;
+
+        let disk_port = disk::pio::DiskPort::default();
+        let mut output_buf = alloc::vec::Vec::<u16>::new();
+        output_buf.resize((iter_count * 256 + leftover / 2) as usize, 0);
+        let mut output_writer = output_buf.as_mut_slice().chunks_mut(256);
+
+        // print all full sectors
+        for i in 0..iter_count {
+            if let Some(chunk) = output_writer.next() {
+                unsafe {crate::disk::pio::read_sector_lba28(disk_port, false, addr + i as u32, chunk);}
+            }
+        }
+        // print the last partial sectors
+        if let Some(chunk) = output_writer.next() {
+            unsafe {crate::disk::pio::read_sector_lba28(disk_port, false, addr + iter_count as u32, chunk);}
+        }
+        // convert to string
+        let cmd_string = output_buf
+            .as_slice()
+            .iter()
+            .map(|x| x.to_le_bytes())
+            .flatten()
+            .map(|c| c as char)
+            .collect::<String>();
+
+        // split command line
+        for x in cmd_string.as_str().split("\n") {
+            let cmds = x.split(";");
+            for cmd in cmds {
+                self.process_command(cmd);
+            }
+        }
+
+        // print newline
+        vga_printf!("\n");
+    }
+
 
     fn poweroff(&self) {
         vga_print(b"Shutting down...\n");
@@ -187,6 +400,8 @@ impl Shell {
         vga_print(b"- clear: Clear screen\n");
         vga_print(b"- multiboot: Display multiboot information\n");
         vga_print(b"- poweroff: Turn off\n");
+        vga_print(b"- read <address> <count>: Loads data from disk at given address and prints count bytes\n");
+        vga_print(b"- write <address> <data>: Writes data into disk starting at given sector address\n");
         //TODO: add multiboot info if works
     }
 

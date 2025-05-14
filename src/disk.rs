@@ -32,46 +32,32 @@ pub mod pio {
     const CONTROL_ADDRESS_REGISTER: u16 = 1;
 
 
-    #[allow(unused)]
-    #[repr(u8)]
-    #[derive(Clone, Copy, Debug)]
-    pub enum ErrorRegisterBits {
-        AddressMarkNotFound = 1,
-        TrackZeroNotFound = 2,
-        Aborted = 4,
-        MediaChangeRequest = 8,
-        IDNotFound = 16,
-        MediaChanged = 32,
-        UncorrectableDataError = 64,
-        BadBlock = 128,
-    }
+
+    const AddressMarkNotFound: u8 = 1;
+    const TrackZeroNotFound: u8 = 2;
+    const Aborted: u8 = 4;
+    const MediaChangeRequest: u8 = 8;
+    const IDNotFound: u8 = 16;
+    const MediaChanged: u8 = 32;
+    const UncorrectableDataError: u8 = 64;
+    const BadBlock: u8 = 128;
 
 
-    #[allow(unused)]
-    #[repr(u8)]
-    #[derive(Clone, Copy, Debug)]
-    pub enum SelectRegisterBits {
-        LBAHigh = 0x07,
-        DriveSelect = 16,
-        UseLBA = 64,
-    }
+    const LBA_HIGH: u8 = 0x07;
+    const DRIVE_SELECT: u8 = 16;
+    const USE_LBA: u8 = 64;
 
 
-    #[allow(unused)]
-    #[repr(u8)]
-    #[derive(Clone, Copy, Debug)]
-    pub enum StatusRegisterBits {
-        Error = 1,
-        // always 0
-        Index = 2,
-        // always 0
-        Corrected = 4,
-        DRQ = 8,
-        OverlappedServiceMode = 16,
-        DriveFault = 32,
-        Ready = 64,
-        Busy = 128,
-    }
+    const STATUS_ERROR: u8 = 1;
+    // ALWAYS 0
+    const STATUS_INDEX: u8 = 2;
+    // ALWAYS 0
+    const STATUS_CORRECTED: u8 = 4;
+    const STATUS_DRQ: u8 = 8;
+    const STATUS_OVERLAPPED_SERVICE_MODE: u8 = 16;
+    const STATUS_DRIVE_FAULT: u8 = 32;
+    const STATUS_READY: u8 = 64;
+    const STATUS_BUSY: u8 = 128;
 
 
     /// Stores information about disk's I/O port addresses.
@@ -135,7 +121,7 @@ pub mod pio {
 
     impl DiskPort {
         /// Returns disk port information referencing secondary ATA bus.
-        fn secondary() -> Self {
+        pub fn secondary() -> Self {
             Self {
                 base: 0x170,
                 ctrl: 0x376,
@@ -166,7 +152,7 @@ pub mod pio {
         // poll status register until BUSY flag clears.
         loop {
             let b = input_byte(cmd_status);
-            if b & StatusRegisterBits::Busy as u8 == 0x00 { break; }
+            if b & STATUS_BUSY == 0x00 { break; }
         }
         // check values in LBA  mid and LBA high registers, if non-0, drive is not ATA - return
         let m = input_byte(disk_port.base + DISK_LBA_MID_REGISTER);
@@ -177,8 +163,8 @@ pub mod pio {
         // wait until READY (or in bad case ERR) flag goes high
         loop {
             let b = input_byte(cmd_status);
-            let flags = StatusRegisterBits::Ready as u8 | StatusRegisterBits::Error as u8;
-            if b & flags == StatusRegisterBits::Ready as u8 {
+            let flags = STATUS_READY | STATUS_ERROR;
+            if b & flags == STATUS_READY {
                 // data is ready - read it into output buffer
                 for i in 0..256 {
                     let data = input_word(disk_port.base + DISK_DATA_REGISTER);
@@ -189,26 +175,32 @@ pub mod pio {
                 }
                 return true;
             }
-            else if b & flags == StatusRegisterBits::Error as u8 {
+            else if b & flags == STATUS_ERROR {
                 return false;
             }
         }
     }
 
 
-    fn poll_status(disk_port: DiskPort) {
-        let control = disk_port.ctrl + CONTROL_CONTROL_REGISTER;
+    pub fn poll_status(disk_port: DiskPort) {
         loop {
-            let s = input_byte(control);
-            let mask = StatusRegisterBits::Ready as u8 | StatusRegisterBits::Busy as u8;
+            let s = input_byte(disk_port.ctrl + CONTROL_ALTERNATE_STATUS_REGISTER);
+            let mask = STATUS_READY | STATUS_BUSY;
             // check if READY flag is the only one set
-            if s & mask == StatusRegisterBits::Ready as u8 { break; }
+            if s & mask == STATUS_READY { break; }
+            if s & STATUS_ERROR != 0x00 {
+                panic!("DRIVE ERROR!\n");
+            }
+            if s & STATUS_DRIVE_FAULT != 0x00 {
+                panic!("DRIVE FAULT!!!\n");
+            }
         }
     }
 
 
     /// Performs "software reset" of ATA bus.
     pub unsafe fn soft_reset(disk_port: DiskPort) {
+        poll_status(disk_port);
         let control = disk_port.ctrl + CONTROL_CONTROL_REGISTER;
         // send software reset command to the disk
         output_byte(control, 0x04);
@@ -219,9 +211,6 @@ pub mod pio {
         // wait until BUSY flag goes low and READY flag goes high
         poll_status(disk_port);
     }
-
-
-
 
 
     /// Reads data from given LBA28 address.
@@ -249,10 +238,9 @@ pub mod pio {
 
     /// Universal function for PIO R/W operation with LBA28 addressing.
     unsafe fn operate_sector_lba28<F: Fn(&mut u16)>(op: u8, op_func: F, disk_port: DiskPort, use_slave: bool, address: u32, output_buffer: &mut [u16]) -> bool {
-        vga_printf!("SETUP\n");
         // check if disk is ready, otherwise reset before operation
         let stat = input_byte(disk_port.ctrl + CONTROL_ALTERNATE_STATUS_REGISTER);
-        let flags = StatusRegisterBits::DRQ as u8 | StatusRegisterBits::Busy as u8;
+        let flags = STATUS_DRQ | STATUS_BUSY;
         if stat & flags != 0x00 {
             unsafe { soft_reset(disk_port); }
         }
@@ -268,47 +256,35 @@ pub mod pio {
         output_byte(disk_port.base + DISK_DRIVE_HEAD_REGISTER, high_bits | select);
         // send read command
         output_byte(disk_port.base + DISK_COMMAND_REGISTER, op);
-        vga_printf!("COMMAND SEND\n");
 
         // skip first 4 error reports, wait until READY
         let mut x = 0;
 
-        let busy = StatusRegisterBits::Busy as u8;
-        let ready = StatusRegisterBits::DRQ as u8;
-        let error = StatusRegisterBits::Error as u8;
-        let fault = StatusRegisterBits::DriveFault as u8;
-
         loop {
-            // vga_printf!("NIGGER\n");
             let b = input_byte(disk_port.base + DISK_STATUS_REGISTER);
             // skip if BUSY is set
-            if b & busy != busy { 
+            if b & STATUS_DRIVE_FAULT == 0x00 { 
                 // if DRQ is set, data is ready to read
-                if b & ready == ready {
+                if b & STATUS_READY != 0x00 {
                     break;
                 }
             }
             // first 4 cycles are over, we can now also check error bit
             if x >= 4 {
-                let e0 = b & error;
-                let e1 = b & fault;
-                if e0 == error || e1 == fault {
+                if b & STATUS_ERROR != 0x00 || b & STATUS_DRIVE_FAULT != 0x00 {
                     return false;
                 }
             }
             x += 1;
         }
-        vga_printf!("DATA READY\n");
         // data is ready to be read - read 2B * 256 = 512B (1 sector)
         for i in 0..256 {
             if let Some(out) = output_buffer.get_mut(i) {
                 op_func(out);
             }
         }
-        vga_printf!("READ\n");
-        // poll the status
+        // wait for status registers
         poll_status(disk_port);
-        vga_printf!("SUCCESS\n");
         // we are finished!
         true
     }

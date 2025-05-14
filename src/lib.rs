@@ -5,7 +5,10 @@
 
 extern crate alloc;
 
+
 mod allocator;
+mod asyn;
+mod disk;
 mod guru;
 mod interrupts;
 mod keyboard;
@@ -52,16 +55,18 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     unsafe {
         multiboot::MULTIBOOT_INFO_ADDR = multiboot_addr;
     }
+    vga_printf!("[boot] retrieving boot record ...\n");
     // getting basic information using multiboot2 standard
     let mbi = Multiboot2::from_ptr(multiboot_addr as *const u32);
     // retrieve memory areas identified by underlying bootloader
+    vga_printf!("[boot] retrieving memory map ...\n");
     let mem_map = Multiboot2::from_ptr(multiboot_addr as *const u32)
         .into_iter()
         .filter_map(|x| if let Tag::MemoryMap(m) = x { Some(m) } else { None })
         .next()
         .expect("Memory map not found!");
 
-
+    vga_printf!("[boot] enabling interrupts ...\n");
     // Initialising interrupt vector by loading IDT (Interrupt Descriptor Table)
     init_idt();
     // Initialising PIC8259 interrupt chain
@@ -69,9 +74,14 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     // Enabling external interrupts by calling STI (set interrupt) instruction
     x86_64::instructions::interrupts::enable();
     // initialise heap memory
+    vga_printf!("[boot] mapping memory ...\n");
     let mut mapper = paging::get_page_mapper(None);
     let mut frame_alloc = allocator::NormalFrameAllocator::new(&mem_map);
     allocator::heap_init(&mut mapper, &mut frame_alloc).expect("heap memory init failed!");
+
+    vga_printf!("[boot] initialising disk interface ...\n");
+    // Initiase ATA PIO driver
+    unsafe {disk::pio::soft_reset(disk::pio::DiskPort::default());}
 
     // Disable blinking cursor by writing VGA control registers
     output_byte(0x3D4, 0x0A);
@@ -113,12 +123,16 @@ pub extern "C" fn mink_entry(multiboot_addr: usize) -> ! {
     vga_set_foreground(VgaTextModeColor::White);
     vga_printf!("MinkOS ready. Starting shell...\n\n");
 
-    // Initialize and run shell
+    // start asynchronous tasks
+    let mut task_runner = asyn::Executor::new();
+    task_runner.spawn(asyn::Task::new(start_shell()));
+    task_runner.run();
+}
+
+/// Asynchronous task taking care of user shell operation.
+async fn start_shell() {
     let mut shell = shell::Shell::new();
     shell.run();
-
-
-    loop {}
 }
 
 #[panic_handler]
