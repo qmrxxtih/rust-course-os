@@ -28,12 +28,10 @@ pub fn init_idt() {
 }
 
 extern "x86-interrupt" fn ata_sec_handler(_stack_frame: InterruptStackFrame) {
-    vga_printf!("ATA SECONDARY!\n");
     end_of_interrupt(IRQ::SecondaryATA);
 }
 
 extern "x86-interrupt" fn ata_prim_handler(_stack_frame: InterruptStackFrame) {
-    vga_printf!("ATA PRIMARY!\n");
     end_of_interrupt(IRQ::PrimaryATA);
 }
 

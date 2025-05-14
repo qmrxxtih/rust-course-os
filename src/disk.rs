@@ -1,149 +1,315 @@
 
-
 /// ATA PIO module.
-pub mod ata {
-    use x86_64::instructions::port::Port;
+pub mod pio {
+    use crate::{port::{input_byte, input_word, output_byte, output_word}, vga_printf};
 
-    use crate::{port::{input_byte, output_byte}, vga_printf};
+    // [R/W] data register offset
+    const DISK_DATA_REGISTER: u16 = 0;
+    // [R] error register offset
+    const DISK_ERROR_REGISTER: u16 = 1;
+    // [W] features register offset
+    const DISK_FEATURES_REGISTER: u16 = 1;
+    // [R/W] sector count register offset
+    const DISK_SECTOR_COUNT_REGISTER: u16 = 2;
+    // [R/W] low byte of LBA (sector number) register offset
+    const DISK_LBA_LOW_REGISTER: u16 = 3;
+    // [R/W] middle byte of LBA (cylinder low) register offset
+    const DISK_LBA_MID_REGISTER: u16 = 4;
+    // [R/W] high byte of LBA (cylinder high) register offset
+    const DISK_LBA_HIGH_REGISTER: u16 = 5;
+    // [R/W] drive/head select register, highest order bits of LBA addressing
+    const DISK_DRIVE_HEAD_REGISTER: u16 = 6;
+    // [R] disk status register offset
+    const DISK_STATUS_REGISTER: u16 = 7;
+    // [W] disk command register offset
+    const DISK_COMMAND_REGISTER: u16 = 7;
 
-    /// Type of device connected on ATA bus.
-    #[derive(Debug)]
-    pub enum DevType {
-        ATADEV_PATAPI,
-        ATADEV_SATAPI,
-        ATADEV_PATA,
-        ATADEV_SATA,
-        Unknown,
-    }
+    // [R] alternate status register offset (does not affect interrupts)
+    const CONTROL_ALTERNATE_STATUS_REGISTER: u16 = 0;
+    // [W] device control register offset
+    const CONTROL_CONTROL_REGISTER: u16 = 0;
+    // [R] drive address information register offset
+    const CONTROL_ADDRESS_REGISTER: u16 = 1;
 
-    /// Structure with ports for PIO ATA device control.
+
     #[allow(unused)]
-    pub struct DeviceControl {
-        // base device register
-        base: u16,
-        // device control register
-        dev_ctrl: u16,
-        // device select register
-        reg_dev_sel: u16,
+    #[repr(u8)]
+    #[derive(Clone, Copy, Debug)]
+    pub enum ErrorRegisterBits {
+        AddressMarkNotFound = 1,
+        TrackZeroNotFound = 2,
+        Aborted = 4,
+        MediaChangeRequest = 8,
+        IDNotFound = 16,
+        MediaChanged = 32,
+        UncorrectableDataError = 64,
+        BadBlock = 128,
     }
 
-    impl Default for DeviceControl {
+
+    #[allow(unused)]
+    #[repr(u8)]
+    #[derive(Clone, Copy, Debug)]
+    pub enum SelectRegisterBits {
+        LBAHigh = 0x07,
+        DriveSelect = 16,
+        UseLBA = 64,
+    }
+
+
+    #[allow(unused)]
+    #[repr(u8)]
+    #[derive(Clone, Copy, Debug)]
+    pub enum StatusRegisterBits {
+        Error = 1,
+        // always 0
+        Index = 2,
+        // always 0
+        Corrected = 4,
+        DRQ = 8,
+        OverlappedServiceMode = 16,
+        DriveFault = 32,
+        Ready = 64,
+        Busy = 128,
+    }
+
+
+    /// Stores information about disk's I/O port addresses.
+    #[derive(Clone, Copy, Debug)]
+    pub struct DiskPort {
+        base: u16,
+        ctrl: u16,
+    }
+
+
+    /// Disk information structure.
+    #[derive(Clone, Copy, Debug)]
+    pub struct DiskInfo {
+        identify_buffer: [u16;256],
+    }
+
+
+    impl DiskInfo {
+        /// Tries to create a new disk information structure using ATA IDENTIFY command.
+        pub fn identify(disk_port: DiskPort, use_slave: bool) -> Option<Self> {
+            let mut buf = [0;256];
+            if identify(disk_port, use_slave, &mut buf) {
+                Some(Self {identify_buffer: buf})
+            } else {
+                None
+            }
+        }
+
+        /// Returns whether identified device is a disk or not.
+        pub fn is_disk(&self) -> bool {
+            self.identify_buffer[0] != 0
+        }
+
+        /// Returns whether identified device supports LBA addressing or not.
+        pub fn lba_support(&self) -> bool {
+            self.identify_buffer[83] & (1 << 10) != 0
+        }
+
+        /// Returns device's maximum addressable sectors using LBA28 addressing.
+        pub fn lba28_sectors(&self) -> u32 {
+            unsafe { *([self.identify_buffer[60], self.identify_buffer[61]].as_ptr() as *const u32) }
+        }
+
+        /// Returns device's maximum addressable sectors using LBA48 addressing.
+        pub fn lba48_sectors(&self) -> u64 {
+            unsafe { *([self.identify_buffer[100], self.identify_buffer[101], self.identify_buffer[102], self.identify_buffer[103]].as_ptr() as *const u64) }
+        }
+    }
+
+
+    impl Default for DiskPort {
+        /// Returns disk port information referencing primary ATA bus.
         fn default() -> Self {
             Self {
                 base: 0x1f0,
-                dev_ctrl: 0x3f6,
-                reg_dev_sel: 0x06,
+                ctrl: 0x3f6,
             }
         }
     }
 
-    pub fn identify(slave: bool, out_buf: &mut [u16;256]) -> Option<()> {
-        // write to drive select register
-        output_byte(0x1f6, if slave { 0xb0 } else { 0xa0 });
-        // reset registers 0x1f2 to 0x1f5 (sector count, LBA lower, LBA middle, LBA higher)
-        for i in 0..=3 {
-            output_byte(0x1f2 + i, 0x00);
+
+    impl DiskPort {
+        /// Returns disk port information referencing secondary ATA bus.
+        fn secondary() -> Self {
+            Self {
+                base: 0x170,
+                ctrl: 0x376,
+            }
         }
-        // write IDENTIFY command to status register port
-        output_byte(0x1f7, 0xec);
-        // read status register port
-        let result = input_byte(0x1f7);
+    }
+
+
+    /// Sends an IDENTIFY command to the ATA controller. Returns true if IDENTIFY executed
+    /// successfully, returning contents into the output buffer.
+    pub fn identify(disk_port: DiskPort, use_slave: bool, output_buffer: &mut [u16]) -> bool {
+        let select = disk_port.base + DISK_DRIVE_HEAD_REGISTER;
+        let cmd_status = disk_port.base + DISK_COMMAND_REGISTER;
+        output_byte(select, if use_slave { 0xf0 } else { 0xe0 });
+        // set sector count, LBA low, LBA mid, LBA high to 0
+        output_byte(disk_port.base + DISK_SECTOR_COUNT_REGISTER, 0x00);
+        output_byte(disk_port.base + DISK_LBA_LOW_REGISTER, 0x00);
+        output_byte(disk_port.base + DISK_LBA_MID_REGISTER, 0x00);
+        output_byte(disk_port.base + DISK_LBA_HIGH_REGISTER, 0x00);
+        // send the IDENTIFY command
+        output_byte(cmd_status, 0xec);
+        // read result of the operation
+        let result = input_byte(cmd_status);
+        // if 0, drive does not exist - return
         if result == 0x00 {
-            None
-        } else {
-            // await clearing of bit 7 (BUSY)
-            loop {
-                // check the BUSY bit
-                if (input_byte(0x1f7) & 0x80 == 0x00) { break; }
-            }
-            // if LBA middle and LBA higher are set, drive is not ATA - end
-            let mid = input_byte(0x1f4);
-            let high = input_byte(0x1f5);
-            if mid != 0x00 || high != 0x00 {
-                return None;
-            }
-            loop {
-                let b = input_byte(0x1f7);
-                // wait until DRQ bit (or ERR bit) is set
-                if b & 0x08 != 0x00 {
-                    // data is ready at this point, read it
-                    let mut port = Port::<u16>::new(0x1f0);
-                    for i in 0..256 {
-                        unsafe {
-                            out_buf[i] = port.read();
-                        }
+            return false;
+        }
+        // poll status register until BUSY flag clears.
+        loop {
+            let b = input_byte(cmd_status);
+            if b & StatusRegisterBits::Busy as u8 == 0x00 { break; }
+        }
+        // check values in LBA  mid and LBA high registers, if non-0, drive is not ATA - return
+        let m = input_byte(disk_port.base + DISK_LBA_MID_REGISTER);
+        let h = input_byte(disk_port.base + DISK_LBA_HIGH_REGISTER);
+        if m != 0x00 || h != 0x00 {
+            return false;
+        }
+        // wait until READY (or in bad case ERR) flag goes high
+        loop {
+            let b = input_byte(cmd_status);
+            let flags = StatusRegisterBits::Ready as u8 | StatusRegisterBits::Error as u8;
+            if b & flags == StatusRegisterBits::Ready as u8 {
+                // data is ready - read it into output buffer
+                for i in 0..256 {
+                    let data = input_word(disk_port.base + DISK_DATA_REGISTER);
+                    // safety first - check if index is not out of range before writing
+                    if let Some(out) = output_buffer.get_mut(i) {
+                        *out = data;
                     }
-                    return Some(())
                 }
-                // if error is set, IDENTIFY failed 
-                if b & 0x01 != 0x00 {
-                    vga_printf!("ERR set!\n");
-                    return None;
-                }
+                return true;
+            }
+            else if b & flags == StatusRegisterBits::Error as u8 {
+                return false;
             }
         }
     }
 
-    pub fn get_device_type(slave: bool, dev_ctrl: DeviceControl) -> DevType {
-        // wait until master is ready
-        soft_reset(dev_ctrl.dev_ctrl);
 
-        output_byte(dev_ctrl.base + dev_ctrl.reg_dev_sel, if slave { 0xb0 } else { 0xa0 });
-        // wait 4x (circa 400 ns) for drive select to work
-        _ = input_byte(dev_ctrl.dev_ctrl);
-        _ = input_byte(dev_ctrl.dev_ctrl);
-        _ = input_byte(dev_ctrl.dev_ctrl);
-        _ = input_byte(dev_ctrl.dev_ctrl);
-
-        // 0x04 = REGISTER_CYLINDER_LOW
-        let cl = input_byte(dev_ctrl.base + 0x04);
-        // 0x05 = REGISTER_CYLINDER_HIGH
-        let ch = input_byte(dev_ctrl.base + 0x05);
-
-        match (cl, ch) {
-            (0x14, 0xeb) => DevType::ATADEV_PATAPI,
-            (0x69, 0x96) => DevType::ATADEV_SATAPI,
-            (0x00, 0x00) => DevType::ATADEV_PATA,
-            (0x3c, 0xc3) => DevType::ATADEV_SATA,
-            _ => DevType::Unknown,
+    fn poll_status(disk_port: DiskPort) {
+        let control = disk_port.ctrl + CONTROL_CONTROL_REGISTER;
+        loop {
+            let s = input_byte(control);
+            let mask = StatusRegisterBits::Ready as u8 | StatusRegisterBits::Busy as u8;
+            // check if READY flag is the only one set
+            if s & mask == StatusRegisterBits::Ready as u8 { break; }
         }
     }
 
 
-    /// Reads data from ATA disk, single tasking way.
-    pub fn read(sectors: u32, dev_ctrl: DeviceControl, out_buf: &mut [u8]) {
-        // reads higher than 2 GiB not allowed
-        if sectors > 0x3fffff {
-            return;
-        }
+    /// Performs "software reset" of ATA bus.
+    pub unsafe fn soft_reset(disk_port: DiskPort) {
+        let control = disk_port.ctrl + CONTROL_CONTROL_REGISTER;
+        // send software reset command to the disk
+        output_byte(control, 0x04);
+        // perform reset on the bus
+        output_byte(control, 0x00);
+        // invoke "fake" delay for disk registers to reset
+        for _ in 0..4 { _ = input_byte(control); }
+        // wait until BUSY flag goes low and READY flag goes high
+        poll_status(disk_port);
     }
 
 
-    /// Software reset of ATA PIO bus.
-    #[allow(unused)]
-    pub fn soft_reset(dcr: u16) {
-        let mut port = Port::<u8>::new(dcr);
 
+
+
+    /// Reads data from given LBA28 address.
+    /// Returns true if read was successful.
+    pub unsafe fn read_sector_lba28(disk_port: DiskPort, use_slave: bool, address: u32, output_buffer: &mut [u16]) -> bool {
+        let op = |y: &mut u16| {
+            *y = input_word(disk_port.base + DISK_DATA_REGISTER);
+        };
         unsafe {
-            // software reset 
-            port.write(0x04);
-            // bus reset to normal operation
-            port.write(0x00);
-            // 4 tries to wait for status bits to reset
-            _ = port.read();
-            _ = port.read();
-            _ = port.read();
-            _ = port.read();
+            operate_sector_lba28(0x20, op, disk_port, use_slave, address, output_buffer)
+        }
+    }
 
-            // wait for ATA PIO to report READY status
-            loop {
-                // read byte from the status register
-                let x = port.read();
-                // check BUSY and READY bits (0x80 = BUSY, 0x40 = READY)
-                if x & 0xc0 != 0x40 {
+
+    /// Write data to give LBA28 address.
+    /// Returns true if write was successful.
+    pub unsafe fn write_sector_lba28(disk_port: DiskPort, use_slave: bool, address: u32, input_buffer: &mut [u16]) -> bool {
+        let op = |y: &mut u16| {
+            output_word(disk_port.base + DISK_DATA_REGISTER, *y);
+        };
+        unsafe {
+            operate_sector_lba28(0x30, op, disk_port, use_slave, address, input_buffer)
+        }
+    }
+
+    /// Universal function for PIO R/W operation with LBA28 addressing.
+    unsafe fn operate_sector_lba28<F: Fn(&mut u16)>(op: u8, op_func: F, disk_port: DiskPort, use_slave: bool, address: u32, output_buffer: &mut [u16]) -> bool {
+        vga_printf!("SETUP\n");
+        // check if disk is ready, otherwise reset before operation
+        let stat = input_byte(disk_port.ctrl + CONTROL_ALTERNATE_STATUS_REGISTER);
+        let flags = StatusRegisterBits::DRQ as u8 | StatusRegisterBits::Busy as u8;
+        if stat & flags != 0x00 {
+            unsafe { soft_reset(disk_port); }
+        }
+        // set sector count
+        output_byte(disk_port.base + DISK_SECTOR_COUNT_REGISTER, 0x01);
+        // set LBA address, byte by byte
+        output_byte(disk_port.base + DISK_LBA_LOW_REGISTER, (address & 0xff) as u8);
+        output_byte(disk_port.base + DISK_LBA_MID_REGISTER, ((address & 0xff00) >> 8) as u8);
+        output_byte(disk_port.base + DISK_LBA_HIGH_REGISTER, ((address & 0xff0000) >> 16) as u8);
+        // last 4 bits of LBA address go to the select register
+        let high_bits = ((address & 0xf000000) >> 24) as u8;
+        let select = if use_slave { 0xf0 } else { 0xe0 };
+        output_byte(disk_port.base + DISK_DRIVE_HEAD_REGISTER, high_bits | select);
+        // send read command
+        output_byte(disk_port.base + DISK_COMMAND_REGISTER, op);
+        vga_printf!("COMMAND SEND\n");
+
+        // skip first 4 error reports, wait until READY
+        let mut x = 0;
+
+        let busy = StatusRegisterBits::Busy as u8;
+        let ready = StatusRegisterBits::DRQ as u8;
+        let error = StatusRegisterBits::Error as u8;
+        let fault = StatusRegisterBits::DriveFault as u8;
+
+        loop {
+            // vga_printf!("NIGGER\n");
+            let b = input_byte(disk_port.base + DISK_STATUS_REGISTER);
+            // skip if BUSY is set
+            if b & busy != busy { 
+                // if DRQ is set, data is ready to read
+                if b & ready == ready {
                     break;
                 }
             }
+            // first 4 cycles are over, we can now also check error bit
+            if x >= 4 {
+                let e0 = b & error;
+                let e1 = b & fault;
+                if e0 == error || e1 == fault {
+                    return false;
+                }
+            }
+            x += 1;
         }
+        vga_printf!("DATA READY\n");
+        // data is ready to be read - read 2B * 256 = 512B (1 sector)
+        for i in 0..256 {
+            if let Some(out) = output_buffer.get_mut(i) {
+                op_func(out);
+            }
+        }
+        vga_printf!("READ\n");
+        // poll the status
+        poll_status(disk_port);
+        vga_printf!("SUCCESS\n");
+        // we are finished!
+        true
     }
 }
