@@ -119,4 +119,4 @@ The shell integrates with low-level system components, including keyboard input 
 
 ## Diagram
 
-`unimplemented!()`
+![diagram is here](./res/os_flow.pdf)
